@@ -53,10 +53,13 @@ export const cfg = {
   telegramToken: () => env("TELEGRAM_BOT_TOKEN"),
   telegramSecret: () => env("TELEGRAM_WEBHOOK_SECRET"),
   telegramBotName: () => env("TELEGRAM_BOT_USERNAME"),
+  telegramApiBase: () => (env("TELEGRAM_API_BASE") || "https://api.telegram.org").replace(/\/+$/, ""),
 
   // Resend
   resendKey: () => env("RESEND_API_KEY"),
   resendFrom: () => env("RESEND_FROM") || "LokMitra <onboarding@resend.dev>",
+  resendBase: () => (env("RESEND_API_BASE") || "https://api.resend.com").replace(/\/+$/, ""),
+  sentinelSweep: () => env("SENTINEL_SWEEP") === "1",
 };
 
 export function integrations() {

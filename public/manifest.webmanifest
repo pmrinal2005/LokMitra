@@ -1,0 +1,10 @@
+{
+  "name": "LokMitra — Citizen Web Sahayak",
+  "short_name": "LokMitra",
+  "description": "Ask about PM-KISAN, Ayushman, e-Shram, scholarships, land records and mandi prices in your own language.",
+  "start_url": "/sahayak",
+  "display": "standalone",
+  "background_color": "#06090F",
+  "theme_color": "#06090F",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

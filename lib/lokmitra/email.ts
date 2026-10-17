@@ -9,7 +9,7 @@ export async function sendEmail(opts: { to: string; subject: string; html: strin
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.to)) return { id: null, error: "invalid e-mail address" };
   const t0 = Date.now();
   try {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch(`${cfg.resendBase()}/emails`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from: cfg.resendFrom(), to: [opts.to], subject: opts.subject.slice(0, 200), html: opts.html, text: opts.text }),

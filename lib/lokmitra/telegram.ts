@@ -9,7 +9,7 @@ export async function tg<T = unknown>(method: string, body: Record<string, unkno
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    const res = await fetch(`${cfg.telegramApiBase()}/bot${token}/${method}`, {
       method: "POST",
       headers: body instanceof FormData ? undefined : { "Content-Type": "application/json" },
       body: body instanceof FormData ? body : JSON.stringify(body),
@@ -94,7 +94,7 @@ export async function tgAnswer(callbackId: string, text?: string) {
 export async function tgFile(fileId: string): Promise<{ blob: Blob; name: string } | null> {
   const f = await tg<{ file_path?: string }>("getFile", { file_id: fileId });
   if (!f.file_path) return null;
-  const res = await fetch(`https://api.telegram.org/file/bot${cfg.telegramToken()}/${f.file_path}`, { cache: "no-store" });
+  const res = await fetch(`${cfg.telegramApiBase()}/file/bot${cfg.telegramToken()}/${f.file_path}`, { cache: "no-store" });
   if (!res.ok) return null;
   const buf = await res.arrayBuffer();
   if (buf.byteLength > 20 * 1024 * 1024) return null;

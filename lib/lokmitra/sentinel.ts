@@ -3,7 +3,7 @@ import { tf, type TfMonitor } from "../tinyfish";
 import { cfg } from "./config";
 import { db, safe, type Row } from "./db";
 import { extractFromMarkdown, translate } from "./groq";
-import { create_monitor, run_monitor_now } from "./ops";
+import { create_monitor, rates, run_monitor_now } from "./ops";
 import { resolvePortal } from "./portal";
 import { schemeById, stateByCode } from "./schemes";
 import { logRun } from "./store";
@@ -194,7 +194,9 @@ export async function processMonitorResult(payload: PagePayload, source: "webhoo
   if (changed && s) notified = await fanOut(s, summary);
   await safe(db.insert("monitor_events", { monitor_id: monitorId, run_id: payload.id ?? null, source, changed, summary, payload: { hash, excerpt: text.slice(0, 6000), urls: (payload.results ?? []).map((r) => r.url).slice(0, 10), errors: payload.errors ?? [] }, notified, created_at: nowIso() }), []);
   if (s) await safe(db.update("sentinels", { monitor_id: monitorId }, { last_run_at: nowIso(), ...(changed ? { last_change: { summary, at: nowIso() } } : {}) }), []);
-  void logRun({ surface: "monitor", purpose: `sentinel_${source}`, scheme_id: s?.scheme_id, state_code: s?.state_code, run_id: monitorId, cost_usd: 0, meta: { changed, notified } });
+  // scheduled runs are billed per run ($0.005 + free Fetch/Search); run-now was already billed in run_monitor_now()
+  const cost = source === "webhook" ? (await rates()).monitor : 0;
+  void logRun({ surface: "monitor", purpose: `sentinel_${source}`, scheme_id: s?.scheme_id, state_code: s?.state_code, run_id: monitorId, cost_usd: cost, meta: { changed, notified } });
   return { changed, summary, notified, monitor_id: monitorId };
 }
 
