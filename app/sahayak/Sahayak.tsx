@@ -2,13 +2,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, citizenId, fmtUsd, hostOf, ssePost } from "@/lib/client";
 import { mdToHtml } from "@/lib/md";
+import { RelayPanel } from "@/components/RelayPanel";
+
+/** CSC operators share one tablet: a stable "csc:<id>" identity (rate limits + report history per centre). */
+function cscUserId(name: string) {
+  const n = name.trim().replace(/[^A-Za-z0-9_.@-]/g, "").slice(0, 60);
+  return n ? `csc:${n}` : citizenId().replace(/^web:/, "csc:");
+}
 
 interface Lang { code: string; name: string; native: string; speech: string; priority: boolean }
 interface St { code: string; name: string; hindi: string }
 interface Confirm { confirm_id: string; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; cached_path: boolean; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
 interface Section { scheme_id: string; scheme_name: string; task: string; status: string; data: Record<string, unknown> | null; sources: string[]; diy: string[]; cache: "hit" | "miss"; portal_state: string; confirm?: Confirm; benefit?: string }
 interface CacheEv { scheme: string; task: string; state: string; hit: boolean; source?: string; hits?: number; search_results?: number; error?: string }
-interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean }
+interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean; needs_captcha?: boolean; relay_id?: string | null; cost_usd?: number }
 interface Turn {
   id: string;
   q: string;
@@ -33,7 +40,10 @@ const EXAMPLES = [
 
 type SR = { new (): { lang: string; interimResults: boolean; continuous: boolean; start(): void; stop(): void; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null } };
 
-export function Sahayak() {
+export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
+  const csc = mode === "csc";
+  const [cscName, setCscName] = useState("");
+  const [served, setServed] = useState(0);
   const [langs, setLangs] = useState<Lang[]>([]);
   const [states, setStates] = useState<St[]>([]);
   const [lang, setLang] = useState("hi");
@@ -47,6 +57,7 @@ export function Sahayak() {
   const [ids, setIds] = useState<Record<string, Record<string, string>>>({});
   const [email, setEmail] = useState("");
   const [mailNote, setMailNote] = useState<Record<string, string>>({});
+  const [relayFor, setRelayFor] = useState<Record<string, string | null>>({}); // gate key → confirm id the relay was started from
   const recRef = useRef<InstanceType<SR> | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -57,6 +68,7 @@ export function Sahayak() {
       setStates(r.states);
     }).catch(() => null);
     try {
+      setCscName(localStorage.getItem("lm-csc") || "");
       setLang(localStorage.getItem("lm-lang") || "hi");
       setState(localStorage.getItem("lm-state") || "");
     } catch {}
@@ -113,7 +125,7 @@ export function Sahayak() {
     try {
       await ssePost(
         "/api/lokmitra/ask",
-        { text: query, user_id: citizenId(), language: lang, state_code: state || undefined, district: district || undefined, channel: "web" },
+        { text: query, user_id: csc ? cscUserId(cscName) : citizenId(), language: lang, state_code: state || undefined, district: district || undefined, channel: csc ? "csc" : "web" },
         ({ event, data }) => {
           if (event === "stage") patchTurn(id, (t) => ({ ...t, stages: [...t.stages, String(data.message)] }));
           else if (event === "intent") patchTurn(id, (t) => ({ ...t, intent: { intent: data.intent as Record<string, unknown>, via: String(data.via) } }));
@@ -130,28 +142,54 @@ export function Sahayak() {
     } finally {
       patchTurn(id, (t) => ({ ...t, done: true }));
       setBusy(false);
+      if (csc) setServed((n) => n + 1);
     }
   };
 
-  const runConfirm = async (c: Confirm, reportId?: string, relayId?: string) => {
+  const runConfirm = async (c: Confirm, reportId?: string, relayId?: string, overrideConfirmId?: string) => {
     const key = c.confirm_id;
-    setRuns((r) => ({ ...r, [key]: { confirm_id: key, scheme_name: c.scheme_name, stages: [], streaming_url: null, steps: 0, result: null, running: true } }));
+    setRuns((r) => ({ ...r, [key]: { confirm_id: key, scheme_name: c.scheme_name, stages: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], streaming_url: null, steps: 0, result: null, running: true, relay_id: relayId ?? null } }));
     const up = (f: (a: AgentRun) => AgentRun) => setRuns((r) => ({ ...r, [key]: f(r[key]) }));
     try {
-      await ssePost("/api/lokmitra/confirm", { confirm_id: key, identifiers: ids[key] ?? {}, report_id: reportId, relay_id: relayId }, ({ event, data }) => {
+      await ssePost("/api/lokmitra/confirm", { confirm_id: overrideConfirmId ?? key, identifiers: ids[key] ?? {}, report_id: reportId, relay_id: relayId }, ({ event, data }) => {
         if (event === "stage") up((a) => ({ ...a, stages: [...a.stages, String(data.message)] }));
         else if (event === "agent") {
           const type = String(data.type ?? "");
           if (type === "STREAMING_URL" && data.streaming_url) up((a) => ({ ...a, streaming_url: String(data.streaming_url) }));
           if (type === "PROGRESS") up((a) => ({ ...a, steps: a.steps + 1, stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
           if (type === "STARTED") up((a) => ({ ...a, stages: [...a.stages, `run ${String(data.run_id ?? "").slice(0, 8)} started`] }));
-        } else if (event === "result") up((a) => ({ ...a, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, stages: [...a.stages, `✓ ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
+        } else if (event === "result") up((a) => ({ ...a, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `✓ ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
         else if (event === "error") up((a) => ({ ...a, error: String(data.error ?? data.message ?? "error") }));
       });
     } catch (e) {
       up((a) => ({ ...a, error: (e as Error).message }));
     } finally {
       up((a) => ({ ...a, running: false }));
+    }
+  };
+
+  /** Parallel multi-domain verification: every pending gate of a turn in ONE request (/api/lokmitra/crosscheck). */
+  const crossCheck = async (t: Turn) => {
+    const gates = t.sections.map((s) => s.confirm).filter((c): c is Confirm => !!c && !runs[c.confirm_id]);
+    if (gates.length < 2) return;
+    for (const c of gates) setRuns((r) => ({ ...r, [c.confirm_id]: { confirm_id: c.confirm_id, scheme_name: c.scheme_name, stages: ["queued in parallel cross-check"], streaming_url: null, steps: 0, result: null, running: true } }));
+    const up = (key: string, f: (a: AgentRun) => AgentRun) => setRuns((r) => (r[key] ? { ...r, [key]: f(r[key]) } : r));
+    try {
+      await ssePost("/api/lokmitra/crosscheck", { confirm_ids: gates.map((g) => g.confirm_id), identifiers: Object.fromEntries(gates.map((g) => [g.confirm_id, ids[g.confirm_id] ?? {}])), report_id: t.report?.report_id }, ({ event, data }) => {
+        const key = String(data.confirm_id ?? "");
+        if (!key) return;
+        if (event === "stage") up(key, (a) => ({ ...a, stages: [...a.stages, String(data.message)] }));
+        else if (event === "agent") {
+          const type = String(data.type ?? "");
+          if (type === "STREAMING_URL" && data.streaming_url) up(key, (a) => ({ ...a, streaming_url: String(data.streaming_url) }));
+          if (type === "PROGRESS") up(key, (a) => ({ ...a, steps: a.steps + 1, stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
+        } else if (event === "result") up(key, (a) => ({ ...a, running: false, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `✓ ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
+        else if (event === "error") up(key, (a) => ({ ...a, running: false, error: String(data.error ?? data.message ?? "error") }));
+      });
+    } catch (e) {
+      for (const g of gates) up(g.confirm_id, (a) => ({ ...a, error: a.error ?? (e as Error).message }));
+    } finally {
+      for (const g of gates) up(g.confirm_id, (a) => ({ ...a, running: false }));
     }
   };
 
@@ -167,9 +205,24 @@ export function Sahayak() {
 
   return (
     <div className="page" style={{ maxWidth: 1080 }}>
+      {csc && (
+        <section className="panel csc-bar" aria-label="CSC operator">
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div className="row">
+              <b>🏪 CSC / VLE mode</b>
+              <input className="input" style={{ width: 220 }} placeholder="CSC ID or operator name" value={cscName} onChange={(e) => { setCscName(e.target.value); try { localStorage.setItem("lm-csc", e.target.value); } catch {} }} aria-label="CSC id" />
+              <span className="chip">citizens served this shift: {served}</span>
+            </div>
+            <div className="row">
+              <button className="btn sm" onClick={() => { setTurns([]); setRuns({}); setIds({}); setRelayFor({}); setText(""); setDistrict(""); }} title="Clear the screen before the next citizen — nothing personal stays on this tablet">🧹 Next citizen</button>
+            </div>
+          </div>
+          <p className="note" style={{ margin: "8px 0 0" }}>The citizen speaks, you type or press the mic. Every answer has a printable slip with QR codes to the official portal. Identifiers are used once and masked in logs; press <b>Next citizen</b> between visitors.</p>
+        </section>
+      )}
       <header className="page-head">
         <div>
-          <h1>LokMitra Sahayak</h1>
+          <h1>{csc ? "CSC Sahayak Desk" : "LokMitra Sahayak"}</h1>
           <p>
             Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Public information is read for free from official portals via TinyFish Search + Fetch; personal checks always ask before spending.
           </p>
@@ -228,6 +281,14 @@ export function Sahayak() {
                 </div>
               )}
 
+              {t.sections.filter((s) => s.confirm && !runs[s.confirm.confirm_id]).length >= 2 && t.done && (
+                <div className="row gate-bar" style={{ marginTop: 12 }}>
+                  <span className="note">🔀 {t.sections.filter((s) => s.confirm).length} personal checks found — run them side by side (parallel cross-verification).</span>
+                  <button className="btn sm paid" onClick={() => crossCheck(t)}>
+                    Run all in parallel ≈ {fmtUsd(t.sections.reduce((a, s) => a + (s.confirm && !runs[s.confirm.confirm_id] ? s.confirm.est_cost_usd : 0), 0))}
+                  </button>
+                </div>
+              )}
               {t.sections.filter((s) => s.confirm).map((s) => {
                 const c = s.confirm!;
                 const run = runs[c.confirm_id];
@@ -250,12 +311,30 @@ export function Sahayak() {
                       ))}
                     </div>
                     <div className="row">
-                      <button className="btn paid" disabled={!!run?.running || (!!run && !run.retry_confirm_id && !run.error)} onClick={() => runConfirm(c, t.report?.report_id)}>
-                        ✅ Confirm & run agent
+                      <button className="btn paid" disabled={!!run?.running || (!!run && !run.retry_confirm_id && !run.error)} onClick={() => runConfirm(c, t.report?.report_id, undefined, run?.retry_confirm_id ?? undefined)}>
+                        {run?.retry_confirm_id ? "↻ Retry agent" : "✅ Confirm & run agent"}
                       </button>
                       <a className="btn sm" href={c.entry_url} target="_blank" rel="noreferrer noopener">Do it myself ↗</a>
                     </div>
-                    {run && <AgentPanel run={run} onOtp={run.retry_confirm_id ? () => (window.location.href = `/sessions?relay=${encodeURIComponent(run.retry_confirm_id!)}`) : undefined} />}
+                    {run && <AgentPanel run={run} onOtp={run.retry_confirm_id && !run.running && relayFor[c.confirm_id] === undefined ? () => setRelayFor((m) => ({ ...m, [c.confirm_id]: run.retry_confirm_id! })) : undefined} />}
+                    {relayFor[c.confirm_id] && (
+                      <RelayPanel
+                        confirmId={relayFor[c.confirm_id]!}
+                        identifiers={ids[c.confirm_id]}
+                        schemeName={c.scheme_name}
+                        onSaved={(relayId) => {
+                          const retry = relayFor[c.confirm_id]!;
+                          setRelayFor((m) => ({ ...m, [c.confirm_id]: null }));
+                          void runConfirm(c, t.report?.report_id, relayId, retry);
+                        }}
+                        onClosed={() => setRelayFor((m) => { const n = { ...m }; delete n[c.confirm_id]; return n; })}
+                      />
+                    )}
+                    {!run && c.requires_otp && relayFor[c.confirm_id] === undefined && (
+                      <button className="btn sm" style={{ alignSelf: "flex-start" }} onClick={() => setRelayFor((m) => ({ ...m, [c.confirm_id]: c.confirm_id }))} title="Log in first with your own OTP, then the agent reuses that session">
+                        🔐 This portal needs OTP — log in first (OTP relay)
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -364,12 +443,13 @@ function AgentPanel({ run, onOtp }: { run: AgentRun; onOtp?: () => void }) {
         </div>
       )}
       {run.error && <p className="note err">⚠ {run.error}</p>}
-      {run.needs_otp && onOtp && (
+      {(run.needs_otp || run.needs_captcha) && onOtp && (
         <div className="row">
-          <span className="note">This portal needs an OTP on your registered mobile.</span>
-          <button className="btn sm paid" onClick={onOtp}>🔐 Log in with OTP relay</button>
+          <span className="note">{run.needs_otp ? "This portal needs an OTP on your registered mobile." : "A CAPTCHA blocked the agent — you can type it yourself."}</span>
+          <button className="btn sm paid" onClick={onOtp}>🔐 {run.needs_otp ? "Log in with OTP relay" : "Solve CAPTCHA via relay"}</button>
         </div>
       )}
+      {run.relay_id && !run.running && <span className="note ok">✓ used your saved login session — no second paid login</span>}
     </div>
   );
 }

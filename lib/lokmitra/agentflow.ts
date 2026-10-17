@@ -266,11 +266,16 @@ export async function* runConfirmed(
 }
 
 /** Run several confirmed checks at once (PM-KISAN + Ayushman + NSP…) — multi-domain cross-verification. */
-export async function crossCheck(confirmIds: string[], onEvent: (idx: number, e: FlowEvent) => void | Promise<void>, signal?: AbortSignal) {
+export async function crossCheck(
+  confirmIds: string[],
+  onEvent: (idx: number, e: FlowEvent) => void | Promise<void>,
+  signal?: AbortSignal,
+  opts: { identifiers?: Record<string, Record<string, string>>; report_id?: string | null } = {},
+) {
   const ids = confirmIds.slice(0, 5);
   const outs = await Promise.all(
     ids.map(async (cid, i) => {
-      const gen = runConfirmed({ confirm_id: cid }, signal);
+      const gen = runConfirmed({ confirm_id: cid, identifiers: opts.identifiers?.[cid], report_id: opts.report_id ?? null }, signal);
       while (true) {
         const n = await gen.next();
         if (n.done) return n.value;

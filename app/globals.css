@@ -762,3 +762,29 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   .slip { box-shadow: none; margin: 0; max-width: none; }
 }
 @media print { .shell { display: block !important; } }
+
+/* ---------- OTP relay panel ---------- */
+.relay { border-radius: 16px; border: 1px solid rgba(46,242,195,.3); background: linear-gradient(160deg, rgba(46,242,195,.07), rgba(6,9,15,.45)); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.relay-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.relay-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.relay-shot { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.relay-shot img { max-height: 520px; object-fit: contain; object-position: top; }
+.otp-input { font-family: var(--font-mono); font-size: 18px; letter-spacing: .3em; }
+@media (max-width: 860px) { .relay-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- misc dashboard ---------- */
+.gate-bar { padding: 10px 12px; border-radius: 14px; border: 1px dashed rgba(255,180,79,.4); justify-content: space-between; }
+.csc-bar { padding: 14px 16px; }
+.json-pre { white-space: pre-wrap; margin: 0; overflow: auto; background: rgba(6,9,15,.5); border: 1px solid var(--hair); border-radius: 12px; padding: 10px; font-size: 11.5px; }
+.page .mode-switch { display: inline-flex; }
+.track-wrap { display: block; margin-top: 6px; }
+.track-wrap .track { display: block; height: 6px; }
+
+/* ---------- printable slip extras ---------- */
+.slip hr { border: 0; border-top: 1px solid #ddd; margin: 14px 0; }
+.slip-body h3, .slip-body h4, .slip-body h5 { color: #0b5d4b; margin: 12px 0 4px; font-size: 14px; }
+.slip-body ul { padding-left: 18px; margin: 4px 0; }
+.slip-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.slip-tbl th, .slip-tbl td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+.slip-tbl th { background: #f2f6f5; }
+.slip .qr svg { width: 110px; height: 110px; display: block; margin: 0 auto 4px; }

@@ -13,6 +13,7 @@ const I = {
   live: <path d="M3 5h18v12H3zM8 21h8M10 9l5 3-5 3V9z" />,
   key: <path d="M14 10a4 4 0 1 0-3.4 3.95L13 16.4V19h2.5v-2H18v-2.6l-4.05-4.05A4 4 0 0 0 14 10zM8.5 9.5h.01" />,
   runs: <path d="M4 6h16M4 12h10M4 18h7M18 14l3 3-3 3" />,
+  csc: <path d="M3 10h18M5 10v9h14v-9M3 10l2-5h14l2 5M9 19v-5h6v5" />,
   chart: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   gear: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />,
 };
@@ -27,6 +28,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: "Citizen",
     items: [
       { href: "/sahayak", label: "Sahayak", icon: svg(I.chat), badge: { text: "22 langs" } },
+      { href: "/csc", label: "CSC Desk", icon: svg(I.csc), badge: { text: "slip+QR" } },
       { href: "/portal-map", label: "Portal Map", icon: svg(I.map), badge: { text: "cache" } },
     ],
   },
