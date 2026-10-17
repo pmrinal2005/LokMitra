@@ -116,6 +116,9 @@ export function CommandDeck() {
             onRunAgent={mission.runAgent}
             onRunSearch={mission.runSearch}
             onRunFetch={mission.runFetch}
+            onRunMonitor={mission.runMonitor}
+            onRunMonitorNow={mission.runMonitorNow}
+            monitors={data?.monitors.items ?? []}
             onCancel={mission.cancel}
             onClear={mission.clear}
             onInspect={mission.inspectRun}

@@ -4,7 +4,7 @@ import type { LogLine } from "@/lib/deck-types";
 import { bus } from "@/lib/bus";
 import { classifyState, hostOf } from "@/lib/classify";
 
-export type MissionMode = "agent" | "search" | "fetch";
+export type MissionMode = "agent" | "search" | "fetch" | "monitor";
 
 export interface MissionState {
   running: boolean;
@@ -34,6 +34,8 @@ const MAX_LINES = 400;
  *  - agent  → POST /api/tinyfish/agent/run-sse  (real SSE: STARTED / STREAMING_URL / PROGRESS / TF_API_RESULT / HEARTBEAT / COMPLETE)
  *  - search → GET  /api/tinyfish/search          (free)
  *  - fetch  → POST /api/tinyfish/fetch           (free)
+ *  - monitor→ POST /api/tinyfish/monitors        (Page monitor for URLs, Topic monitor for queries)
+ *             POST /api/tinyfish/monitors/:id/runs (run-now)
  */
 export function useMission() {
   const [lines, setLines] = useState<LogLine[]>(() => [mk("·", "meta", "// command deck online — awaiting next citizen query...")]);
@@ -253,6 +255,57 @@ export function useMission() {
     [push],
   );
 
+  /* ---------------- MONITOR (scheduled watch) ---------------- */
+  const runMonitor = useCallback(
+    async (target: string, cron: string) => {
+      const isUrl = /^https?:\/\//i.test(target);
+      setState((s) => ({ ...s, running: true, status: "running", host: isUrl ? hostOf(target) : s.host }));
+      const id = `monitor-${Date.now()}`;
+      bus.emit("fish", { type: "swim", id, target: classifyState(target), color: "#FFB44F" });
+      const body = isUrl
+        ? { type: "fetch", config: { url: target, format: "markdown" }, schedule_cron: cron, name: `LokMitra · ${hostOf(target)}`.slice(0, 100), purpose: "Alert when scheme rules, deadlines, eligibility or prices change for Indian citizens" }
+        : { type: "search", config: { query: target, result_limit: 10 }, schedule_cron: cron, name: `LokMitra · ${target}`.slice(0, 100), purpose: "Alert when new official government notices appear for this citizen topic" };
+      push(mk("▶", "action", `monitor » ${isUrl ? "page" : "topic"} watch on ${isUrl ? hostOf(target) : `“${target}”`} · cron “${cron}” (UTC)`));
+      try {
+        const r = await fetch("/api/tinyfish/monitors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (!r.ok) throw Object.assign(new Error(j?.error?.message || `HTTP ${r.status}`), { j });
+        const mon = (j.monitor ?? j) as { id?: string; status?: string };
+        push(mk("✓", "success", `monitor created · id=${mon.id ?? "?"} · status=${mon.status ?? "active"} · baseline captured`, j));
+        bus.emit("bloop", { ok: true });
+        setState((s) => ({ ...s, running: false, status: "COMPLETED", lastResult: j }));
+      } catch (e) {
+        push(mk("✕", "fail", `monitor failed: ${(e as Error).message}`, (e as { j?: unknown }).j));
+        setState((s) => ({ ...s, running: false, status: "ERROR" }));
+      }
+    },
+    [push],
+  );
+
+  const runMonitorNow = useCallback(
+    async (monitorId: string) => {
+      setState((s) => ({ ...s, running: true, status: "running" }));
+      push(mk("▶", "action", `monitor » run-now ${monitorId} via /v1/monitors/{id}/runs`));
+      try {
+        let r = await fetch(`/api/tinyfish/monitors/${encodeURIComponent(monitorId)}/runs`, { method: "POST" });
+        let j = await r.json();
+        if (r.status === 409 && j?.error?.code === "RETRY_REQUIRED") {
+          push(mk("⚠", "retry", "RETRY_REQUIRED — retrying once"));
+          r = await fetch(`/api/tinyfish/monitors/${encodeURIComponent(monitorId)}/runs`, { method: "POST" });
+          j = await r.json();
+        }
+        if (!r.ok) throw Object.assign(new Error(j?.error?.message || `HTTP ${r.status}`), { j });
+        push(mk("✓", "success", `monitor run complete · inspect diff/result`, j));
+        bus.emit("bloop", { ok: true });
+        setState((s) => ({ ...s, running: false, status: "COMPLETED", lastResult: j }));
+      } catch (e) {
+        push(mk("✕", "fail", `monitor run failed: ${(e as Error).message}`, (e as { j?: unknown }).j));
+        setState((s) => ({ ...s, running: false, status: "ERROR" }));
+      }
+    },
+    [push],
+  );
+
   /** Show a historical run's real step log from GET /v1/runs/{id}. */
   const inspectRun = useCallback(
     async (runId: string) => {
@@ -286,5 +339,5 @@ export function useMission() {
     [push],
   );
 
-  return { lines, state, runAgent, runSearch, runFetch, cancel, clear, inspectRun };
+  return { lines, state, runAgent, runSearch, runFetch, runMonitor, runMonitorNow, cancel, clear, inspectRun };
 }

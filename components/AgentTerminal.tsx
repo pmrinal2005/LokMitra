@@ -1,6 +1,6 @@
 "use client";
 import { memo, useEffect, useRef, useState } from "react";
-import type { LogLine, RecentRun } from "@/lib/deck-types";
+import type { DeckOverview, LogLine, RecentRun } from "@/lib/deck-types";
 import type { MissionMode, MissionState } from "@/hooks/useMission";
 import { isCalm } from "@/hooks/useCalm";
 
@@ -36,6 +36,12 @@ const PRESETS: { label: string; hindi: string; mode: MissionMode; url?: string; 
     mode: "agent",
     url: "https://www.myscheme.gov.in/",
     goal: "Search for schemes for women farmers and return the first 3 scheme names with a one-line benefit each as JSON {\"schemes\":[{\"name\":string,\"benefit\":string}]}.",
+  },
+  {
+    label: "Watch PM-KISAN updates",
+    hindi: "निगरानी",
+    mode: "monitor",
+    query: "PM-KISAN next installment date official announcement",
   },
   {
     label: "eCourts services",
@@ -89,7 +95,10 @@ const Line = memo(function Line({ line, animate, onDone }: { line: LogLine; anim
         tabIndex={clickable ? 0 : undefined}
         aria-expanded={clickable ? open : undefined}
       >
-        <span className="t">{time}</span>
+        {/* initial line is rendered on server + client at different instants/timezones */}
+        <span className="t" suppressHydrationWarning>
+          {time}
+        </span>
         <span className="g" aria-hidden="true">
           {line.glyph}
         </span>
@@ -110,6 +119,9 @@ export function AgentTerminal({
   onRunAgent,
   onRunSearch,
   onRunFetch,
+  onRunMonitor,
+  onRunMonitorNow,
+  monitors,
   onCancel,
   onClear,
   onInspect,
@@ -121,6 +133,9 @@ export function AgentTerminal({
   onRunAgent: (url: string, goal: string) => void;
   onRunSearch: (q: string) => void;
   onRunFetch: (url: string) => void;
+  onRunMonitor: (target: string, cron: string) => void;
+  onRunMonitorNow: (id: string) => void;
+  monitors: DeckOverview["monitors"]["items"];
   onCancel: () => void;
   onClear: () => void;
   onInspect: (id: string) => void;
@@ -130,6 +145,7 @@ export function AgentTerminal({
   const [url, setUrl] = useState("https://pmkisan.gov.in/");
   const [goal, setGoal] = useState("");
   const [query, setQuery] = useState("PM Kisan 21st installment date status check");
+  const [cron, setCron] = useState("0 3 * * *");
   const boxRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const mountedIds = useRef<Set<string> | null>(null);
@@ -154,6 +170,9 @@ export function AgentTerminal({
     } else if (mode === "search") {
       if (!query.trim()) return;
       onRunSearch(query.trim());
+    } else if (mode === "monitor") {
+      if (!query.trim() || cron.trim().split(/\s+/).length < 5) return;
+      onRunMonitor(query.trim(), cron.trim());
     } else {
       if (!url) return;
       onRunFetch(url.trim());
@@ -179,11 +198,24 @@ export function AgentTerminal({
           <button type="button" className="mode-btn" aria-pressed={mode === "fetch"} onClick={() => setMode("fetch")}>
             FETCH · free
           </button>
+          <button type="button" className="mode-btn paid" aria-pressed={mode === "monitor"} onClick={() => setMode("monitor")}>
+            MONITOR · $
+          </button>
           <button type="button" className="mode-btn paid" aria-pressed={mode === "agent"} onClick={() => setMode("agent")}>
             AGENT · paid
           </button>
         </div>
-        {mode === "search" ? (
+        {mode === "monitor" ? (
+          <>
+            <input className="field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="https://portal.gov.in/page (page watch) or a topic query" aria-label="Monitor target: URL or topic" />
+            <select className="field" value={cron} onChange={(e) => setCron(e.target.value)} aria-label="Monitor schedule (UTC cron)">
+              <option value="0 3 * * *">daily · 08:30 IST</option>
+              <option value="0 */6 * * *">every 6 hours</option>
+              <option value="0 * * * *">hourly</option>
+              <option value="0 3 * * 1">weekly · Monday</option>
+            </select>
+          </>
+        ) : mode === "search" ? (
           <input className="field" style={{ gridColumn: "span 2" }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="citizen query, e.g. “राशन कार्ड स्टेटस उत्तर प्रदेश”" aria-label="Search query" lang="hi-Latn" />
         ) : (
           <>
@@ -247,6 +279,23 @@ export function AgentTerminal({
           )}
         </span>
         <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {monitors.length > 0 && (
+            <select
+              className="field"
+              style={{ width: "auto", padding: "5px 10px", fontSize: 11 }}
+              aria-label="Run a monitor now"
+              value=""
+              disabled={state.running || disabled}
+              onChange={(e) => e.target.value && onRunMonitorNow(e.target.value)}
+            >
+              <option value="">run monitor now…</option>
+              {monitors.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.status === "active" ? "◉" : "○"} {m.type} · {(m.name ?? m.id).slice(0, 48)}
+                </option>
+              ))}
+            </select>
+          )}
           {recent.length > 0 && (
             <select
               className="field"

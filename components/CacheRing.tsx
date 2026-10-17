@@ -81,7 +81,7 @@ export function CacheRing({ data }: { data: DeckOverview | null }) {
             <small>%</small>
           </div>
           <div className="ring-cap">served free</div>
-          <div className="ring-mono">Discover-Once-Fetch-Forever</div>
+          <div className="ring-mono">Discover-Once-<wbr />Fetch-Forever</div>
         </div>
       </div>
       <div className="ring-legend">
