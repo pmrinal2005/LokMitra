@@ -92,17 +92,18 @@ function matches(r: Row, q: Query) {
   return true;
 }
 const uuid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-const PK: Record<string, string> = { users: "id", content_cache: "key", user_sessions: "id", sentinels: "monitor_id" };
+const PK: Record<string, string> = { users: "id", content_cache: "key", user_sessions: "id", sentinels: "monitor_id", ephemeral_profiles: "profile_id" };
 const DEFAULTS: Record<string, () => Row> = {
   portal_map: () => ({ id: uuid(), deep_links: [], nav_path: [], selectors: {}, source: "seed", discovery_cost_usd: 0, hits: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
   runs_log: () => ({ id: uuid(), status: "ok", cost_usd: 0, meta: {}, created_at: new Date().toISOString() }),
-  benefit_reports: () => ({ id: uuid(), cost_usd: 0, cache_hits: 0, cache_misses: 0, sources: [], created_at: new Date().toISOString() }),
-  monitor_subscriptions: () => ({ id: uuid(), kind: "deadline", created_at: new Date().toISOString() }),
+  benefit_reports: () => ({ id: uuid(), cost_usd: 0, cache_hits: 0, cache_misses: 0, sources: [], agent_results: [], created_at: new Date().toISOString() }),
+  monitor_subscriptions: () => ({ id: uuid(), kind: "deadline", channel: "telegram", email: null, created_at: new Date().toISOString() }),
   users: () => ({ language: "hi", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
   content_cache: () => ({ hits: 0, fetched_at: new Date().toISOString() }),
   user_sessions: () => ({ data: {}, created_at: new Date().toISOString() }),
   sentinels: () => ({ id: uuid(), state_code: "IN", kind: "deadline", created_at: new Date().toISOString() }),
   monitor_events: () => ({ id: uuid(), source: "webhook", changed: false, payload: {}, notified: 0, created_at: new Date().toISOString() }),
+  ephemeral_profiles: () => ({ purpose: "otp_relay", deleted_at: null, created_at: new Date().toISOString() }),
 };
 
 /* ------------------------------------------------------------------ */

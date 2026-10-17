@@ -41,8 +41,8 @@ export const cfg = {
   groqBase: () => (env("GROQ_BASE_URL") || "https://api.groq.com/openai/v1").replace(/\/+$/, ""),
   groqModelHeavy: () => env("GROQ_MODEL_HEAVY") || "openai/gpt-oss-120b",
   groqModelMid: () => env("GROQ_MODEL_MID") || "openai/gpt-oss-20b",
-  groqModelLight: () => env("GROQ_MODEL_LIGHT") || "qwen/qwen3.8-27b",
-  groqModelTranslate: () => env("GROQ_MODEL_TRANSLATE") || env("GROQ_MODEL_LIGHT") || "qwen/qwen3.8-27b",
+  groqModelLight: () => env("GROQ_MODEL_LIGHT") || "qwen/qwen3-8b-27b",
+  groqModelTranslate: () => env("GROQ_MODEL_TRANSLATE") || env("GROQ_MODEL_LIGHT") || "qwen/qwen3-8b-27b",
   groqModelStt: () => env("GROQ_MODEL_STT") || "whisper-large-v3-turbo",
 
   // Supabase (PostgREST)

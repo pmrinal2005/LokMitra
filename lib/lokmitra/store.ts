@@ -62,7 +62,7 @@ export async function updateRunLog(runId: string, patch: Partial<RunLog>) {
 /* ================================================================== */
 /* Ephemeral sessions (confirm gate, OTP relay, profile setup, chat)   */
 /* ================================================================== */
-export type SessionKind = "confirm" | "otp" | "profile_setup" | "chat" | "rate" | "tg_state" | "agent_run";
+export type SessionKind = "confirm" | "otp" | "profile_setup" | "chat" | "rate" | "tg_state" | "agent_run" | "browser";
 
 export interface SessionRow<T = Record<string, unknown>> {
   id: string;

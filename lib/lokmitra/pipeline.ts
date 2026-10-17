@@ -6,8 +6,8 @@ import { langByCode } from "./languages";
 import { fetch_clean_markdown, rates, type FetchedPage } from "./ops";
 import { cacheState, getPortal, resolvePortal, type PortalRow } from "./portal";
 import { estimateSteps, INFO_SCHEMA, PRICE_SCHEMA, schemeById, stateByCode, type SchemeDef } from "./schemes";
-import { getUser, logRun, rateLimit, seal, sessions, upsertUser } from "./store";
-import { clip, hostOf, nowIso, redact, uuid } from "./util";
+import { getUser, logRun, rateLimit, sessions, upsertUser } from "./store";
+import { clip, hostOf, nowIso, redact, seal, uuid } from "./util";
 
 export type Emit = (event: string, data: Record<string, unknown>) => void | Promise<void>;
 
@@ -269,6 +269,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     }).catch(async () => db.insert("benefit_reports", { id: report_id, user_id: userId, language: replyLang, query: redact(text), intent: {}, sections: [], summary_en, summary_local, sources, cache_hits, cache_misses, created_at: nowIso() })),
     [],
   );
+  for (const s of sections) if (s.confirm) await safe(sessions.patch(s.confirm.confirm_id, { report_id }), null);
   await safe(sessions.put("chat", { summary_en, report_id }, 3600 * 6, { id: `chat_${userId}`.slice(0, 128), user_id: userId }), null);
   void logRun({ surface: "llm", purpose: "report", state_code: intent.state_code, cache: cache_misses ? "miss" : "hit", latency_ms: Date.now() - t0, meta: { sections: sections.length, via, lang: replyLang, channel: input.channel ?? "web" } });
 
