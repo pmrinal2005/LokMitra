@@ -20,6 +20,10 @@ export const cfg = {
   adminToken: () => env("ADMIN_TOKEN"),
   cronSecret: () => env("CRON_SECRET"),
   webhookSecret: () => env("WEBHOOK_SECRET") || env("CRON_SECRET") || "",
+  sessionSecret: () => env("SESSION_SECRET"),
+  otpSessionTtlSec: () => num("OTP_SESSION_TTL_SECONDS", 900),
+  confirmTtlSec: () => num("CONFIRM_TTL_SECONDS", 600),
+  sentinelCron: () => env("SENTINEL_CRON") || "CRON_TZ=Asia/Kolkata 0 8 * * 1",
 
   // budget guards
   budgetUsd: () => num("DECK_BUDGET_USD", 5),
@@ -65,5 +69,7 @@ export function integrations() {
     public_base_url: cfg.publicBaseUrl() || null,
     admin_token: !!cfg.adminToken(),
     cron_secret: !!cfg.cronSecret(),
+    session_secret: !!cfg.sessionSecret(),
+    webhook_secret: !!cfg.webhookSecret(),
   };
 }
