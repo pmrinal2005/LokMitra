@@ -1,0 +1,24 @@
+# deps
+node_modules/
+# next
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+# vercel
+.vercel
+# env
+.env
+.env.local
+.env.*.local
+.env.production
+# logs
+logs/
+*.log
+npm-debug.log*
+# pm2
+.pm2/
+# misc
+.DS_Store
+*.zip
+*.tar.gz

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "regions": ["bom1"],
+  "functions": {
+    "app/api/tinyfish/agent/run-sse/route.ts": { "maxDuration": 300 },
+    "app/api/tinyfish/agent/run/route.ts": { "maxDuration": 300 },
+    "app/api/tinyfish/fetch/route.ts": { "maxDuration": 150 },
+    "app/api/tinyfish/monitors/[id]/runs/route.ts": { "maxDuration": 120 },
+    "app/api/tinyfish/browser/route.ts": { "maxDuration": 60 },
+    "app/api/deck/overview/route.ts": { "maxDuration": 30 }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    }
+  ]
+}
