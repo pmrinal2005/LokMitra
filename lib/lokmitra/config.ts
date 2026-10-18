@@ -25,17 +25,15 @@ export const cfg = {
   confirmTtlSec: () => num("CONFIRM_TTL_SECONDS", 600),
   sentinelCron: () => env("SENTINEL_CRON") || "CRON_TZ=Asia/Kolkata 0 8 * * 1",
 
-  // budget guards
-  budgetUsd: () => num("DECK_BUDGET_USD", 5),
-  minWalletUsd: () => num("MIN_WALLET_USD", 0.25),
+  // rates are informational (cost display only) — there is NO budget cap / spend ceiling
   stepRateFallback: () => num("TINYFISH_STEP_RATE_USD", 0.016),
   monitorRateFallback: () => num("TINYFISH_MONITOR_RATE_USD", 0.005),
   browserRateFallback: () => num("TINYFISH_BROWSER_RATE_USD_PER_MIN", 0.002),
   agentMode: () => (env("TINYFISH_AGENT_MODE") === "strict" ? "strict" : "default"),
   sendMaxSteps: () => env("TINYFISH_SEND_MAX_STEPS") === "1",
-  maxAgentSteps: () => num("LOKMITRA_MAX_AGENT_STEPS", 25),
-  cacheTtlSec: () => num("LOKMITRA_FETCH_TTL_SECONDS", 6 * 3600),
-  prefetchLimit: () => num("PREFETCH_LIMIT", 200),
+  // functional wall-clock limit per Agent run so it fits in one serverless request (Vercel maxDuration 300 s). 0 = none.
+  agentMaxDurationSec: () => num("TINYFISH_MAX_DURATION_SECONDS", 240),
+  // abuse protection per citizen / CSC (privacy & fairness guardrail, not a cost control). 0 = off.
   rateLimitPerHour: () => num("RATE_LIMIT_PER_HOUR", 30),
 
   // Groq (OpenAI-compatible)

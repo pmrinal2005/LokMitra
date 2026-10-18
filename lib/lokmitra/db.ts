@@ -92,14 +92,12 @@ function matches(r: Row, q: Query) {
   return true;
 }
 const uuid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-const PK: Record<string, string> = { users: "id", content_cache: "key", user_sessions: "id", sentinels: "monitor_id", ephemeral_profiles: "profile_id" };
+const PK: Record<string, string> = { users: "id", user_sessions: "id", sentinels: "monitor_id", ephemeral_profiles: "profile_id" };
 const DEFAULTS: Record<string, () => Row> = {
-  portal_map: () => ({ id: uuid(), deep_links: [], nav_path: [], selectors: {}, source: "seed", discovery_cost_usd: 0, hits: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
   runs_log: () => ({ id: uuid(), status: "ok", cost_usd: 0, meta: {}, created_at: new Date().toISOString() }),
-  benefit_reports: () => ({ id: uuid(), cost_usd: 0, cache_hits: 0, cache_misses: 0, sources: [], agent_results: [], created_at: new Date().toISOString() }),
+  benefit_reports: () => ({ id: uuid(), cost_usd: 0, live_calls: {}, sources: [], agent_results: [], created_at: new Date().toISOString() }),
   monitor_subscriptions: () => ({ id: uuid(), kind: "deadline", channel: "telegram", email: null, created_at: new Date().toISOString() }),
   users: () => ({ language: "hi", created_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
-  content_cache: () => ({ hits: 0, fetched_at: new Date().toISOString() }),
   user_sessions: () => ({ data: {}, created_at: new Date().toISOString() }),
   sentinels: () => ({ id: uuid(), state_code: "IN", kind: "deadline", created_at: new Date().toISOString() }),
   monitor_events: () => ({ id: uuid(), source: "webhook", changed: false, payload: {}, notified: 0, created_at: new Date().toISOString() }),
@@ -180,16 +178,12 @@ export const db = {
 
   async rpc(fn: string, args: Row) {
     if (dbBackend() === "supabase") return sb(`rpc/${fn}`, { method: "POST", body: JSON.stringify(args) });
-    if (fn === "lokmitra_portal_hit") {
-      const r = tbl("portal_map").find((x) => x.id === args.p_id);
-      if (r) r.hits = Number(r.hits ?? 0) + 1;
-    }
     return null;
   },
 
   async ping(): Promise<{ ok: boolean; backend: string; error?: string }> {
     try {
-      await db.select("portal_map", { limit: 1, select: "id" });
+      await db.select("runs_log", { limit: 1, select: "id" });
       return { ok: true, backend: dbBackend() };
     } catch (e) {
       return { ok: false, backend: dbBackend(), error: (e as Error).message };
@@ -197,7 +191,7 @@ export const db = {
   },
 };
 
-/** Never let a logging/caching failure break a citizen request. */
+/** Never let a logging failure break a citizen request. */
 export async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
   try {
     return await p;

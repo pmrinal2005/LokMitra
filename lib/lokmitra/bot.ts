@@ -177,17 +177,17 @@ async function onCommand(chat: string, userId: string, text: string, lang: strin
 
 async function runAsk(chat: string, userId: string, text: string, lang: string) {
   await tgTyping(chat);
-  await tgSend(chat, "🔎 LokMitra is checking official portals…");
+  await tgSend(chat, "🔎 LokMitra is checking the official portals live right now…");
   let res: AskResult;
   try {
     res = await ask({ text, user_id: userId, channel: "telegram", language: lang });
   } catch (e) {
     return tgSend(chat, `⚠ ${(e as Error).message}`);
   }
-  const hits = res.cache_hits;
-  const footer = `\n\n<i>⚡ ${hits}/${res.sections.length} served from LokMitra cache (free) · ${Math.round(res.elapsed_ms / 100) / 10}s · $0.00</i>`;
+  const lc = res.live_calls;
+  const footer = `\n\n<i>● Live: ${lc.search} TinyFish Search · ${lc.fetch_ok}/${lc.fetch_urls} pages fetched now · ${Math.round(res.elapsed_ms / 100) / 10}s</i>`;
   const kb: InlineKb = [];
-  for (const s of res.sections) if (s.confirm) kb.push([{ text: `✅ Check my ${s.scheme_name} (~${s.confirm.est_steps} steps ≈ $${s.confirm.est_cost_usd})`, callback_data: `cf:${s.confirm.confirm_id}`.slice(0, 64) }]);
+  for (const s of res.sections) if (s.confirm) kb.push([{ text: `✅ Check my ${s.scheme_name} live (TinyFish agent)`, callback_data: `cf:${s.confirm.confirm_id}`.slice(0, 64) }]);
   if (kb.length) kb.push([{ text: "❌ Not now", callback_data: "cx" }]);
   kb.push(...reportKb(res.report_id));
   await tgSend(chat, mdToTg(res.summary_local) + footer, { html: true, keyboard: kb });

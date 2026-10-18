@@ -14,7 +14,6 @@ export interface RunLog {
   scheme_id?: string | null;
   run_id?: string | null;
   status?: "ok" | "error" | "running" | "cancelled" | "skipped";
-  cache?: "hit" | "miss" | "bypass" | null;
   steps?: number | null;
   cost_usd?: number;
   latency_ms?: number | null;
@@ -40,7 +39,6 @@ export async function logRun(r: RunLog): Promise<string> {
       scheme_id: r.scheme_id ?? null,
       run_id: r.run_id ?? null,
       status: r.status ?? "ok",
-      cache: r.cache ?? null,
       steps: r.steps ?? null,
       cost_usd: Math.round((r.cost_usd ?? 0) * 10000) / 10000,
       latency_ms: r.latency_ms ?? null,

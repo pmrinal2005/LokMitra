@@ -6,6 +6,7 @@ import { factCheck, factCheckPages, type FactResult } from "./facts";
 import { glossaryLang } from "./glossary";
 import { chatJson, translateBatch, type Intent, type SectionInput } from "./groq";
 import { listSentinels } from "./sentinel";
+import { fetch_clean_markdown } from "./ops";
 import { schemeById } from "./schemes";
 import { clip, hostOf } from "./util";
 import { reportToMarkdown, type Contradiction, type KeyFact, type NextStep, type ReportItem, type SentinelFact, type StructuredReport } from "./report-shape";
@@ -22,7 +23,7 @@ import { reportToMarkdown, type Contradiction, type KeyFact, type NextStep, type
  */
 
 export interface SynthSection extends SectionInput {
-  cache: "hit" | "miss";
+  live: true;
   portal_state: string;
   confirm?: { confirm_id: string; est_steps: number; est_cost_usd: number; entry_url: string; requires_otp: boolean | null };
   pages?: { url: string; text: string }[];
@@ -58,15 +59,22 @@ function helplineFromFacts(fc: FactResult[]) {
   return fc.find((f) => f.fact_id.endsWith("helpline") && f.status === "confirmed")?.found ?? null;
 }
 
+/**
+ * Sentinel facts for the report. The Monitor's own change alert (its latest event summary) is
+ * shown as-is; the guideline fact-check runs on a LIVE TinyFish Fetch of each page sentinel's
+ * target made right now for this report — never on previously stored page text.
+ */
 async function sentinelFacts(schemeIds: string[], state: string | null): Promise<SentinelFact[]> {
   const rows = (await listSentinels()).filter((s) => schemeIds.includes(s.scheme_id) && (s.state_code === "IN" || s.state_code === state));
   if (!rows.length) return [];
+  const pageTargets = [...new Set(rows.filter((s) => s.kind !== "circular" && s.target.startsWith("http")).map((s) => s.target))];
+  const live = pageTargets.length ? await fetch_clean_markdown(pageTargets, { purpose: "LokMitra sentinel live fact-check for a citizen report" }) : [];
+  const liveByUrl = new Map(live.map((p) => [p.url, p]));
   const out: SentinelFact[] = [];
-  for (const s of rows.slice(0, 6)) {
-    const ev = await safe(db.select<Row>("monitor_events", { eq: { monitor_id: s.monitor_id }, order: { col: "created_at" }, limit: 5 }), []);
-    const withText = ev.find((e) => typeof (e.payload as Row | undefined)?.excerpt === "string" && String((e.payload as Row).excerpt).length > 60);
+  for (const s of rows) {
+    const ev = await safe(db.select<Row>("monitor_events", { eq: { monitor_id: s.monitor_id }, order: { col: "created_at" }, limit: 5, select: "changed,summary,created_at" }), []);
     const changed = ev.find((e) => e.changed);
-    const excerpt = withText ? String((withText.payload as Row).excerpt) : "";
+    const page = liveByUrl.get(s.target);
     out.push({
       monitor_id: s.monitor_id,
       scheme_id: s.scheme_id,
@@ -77,7 +85,7 @@ async function sentinelFacts(schemeIds: string[], state: string | null): Promise
       last_run_at: s.last_run_at ?? null,
       summary: changed ? str(changed.summary) : ev[0] ? str(ev[0].summary) || "watching — no change detected yet" : "watching — first scheduled run pending",
       changed: !!changed,
-      facts: excerpt && s.kind !== "circular" ? factCheck(s.scheme_id, excerpt, s.target.startsWith("http") ? s.target : null).filter((f) => f.status !== "not_stated") : [],
+      facts: page?.text && s.kind !== "circular" ? factCheck(s.scheme_id, page.text, s.target).filter((f) => f.status !== "not_stated") : [],
     });
   }
   return out;
@@ -91,7 +99,7 @@ function nextStepsFor(items: ReportItem[], contradictions: Contradiction[]): Nex
   for (const it of items) {
     const a = it.agent;
     if (a?.blocked_by === "otp") add(`${it.scheme_name}: log in with the OTP sent to your registered mobile (LokMitra OTP relay) to finish the status check.`, 1, it.scheme_id, it.confirm?.entry_url);
-    if (it.status === "needs_confirmation" && it.confirm) add(`${it.scheme_name}: confirm the personal check (~${it.confirm.est_steps} agent steps ≈ $${it.confirm.est_cost_usd}) or check it yourself on ${hostOf(it.confirm.entry_url)}.`, 2, it.scheme_id, it.confirm.entry_url);
+    if (it.status === "needs_confirmation" && it.confirm) add(`${it.scheme_name}: confirm the live personal check (a TinyFish agent runs on ${hostOf(it.confirm.entry_url)} right now) or check it yourself there.`, 2, it.scheme_id, it.confirm.entry_url);
     if (it.scheme_id === "pm-kisan" && it.verdict === "likely") add("PM-KISAN: make sure eKYC is complete (pmkisan.gov.in → eKYC with Aadhaar OTP, or biometric at a CSC) and your bank account is Aadhaar-seeded.", 2, it.scheme_id, "https://pmkisan.gov.in/");
     if (it.scheme_id === "pmfby" && it.verdict === "likely") add("PMFBY: enrol through your bank / CSC before the season cut-off; report crop loss within 72 hours on helpline 14447.", 3, it.scheme_id, "https://pmfby.gov.in/");
     if (it.scheme_id === "ayushman" && it.verdict !== "unlikely") add("Ayushman: check your name on beneficiary.nha.gov.in with mobile OTP and download the Ayushman card (or ask the Arogya Mitra at an empanelled hospital).", 3, it.scheme_id, "https://beneficiary.nha.gov.in/");
@@ -129,7 +137,7 @@ export async function buildReport(input: { query: string; intent: Intent; sectio
       reasons: e.reasons,
       facts,
       fact_check: fc,
-      cache: s.cache,
+      live: true,
       sources: s.sources.slice(0, 4),
       diy: s.diy,
       confirm: s.confirm ? { confirm_id: s.confirm.confirm_id, est_steps: s.confirm.est_steps, est_cost_usd: s.confirm.est_cost_usd, entry_url: s.confirm.entry_url, requires_otp: s.confirm.requires_otp } : null,
@@ -185,7 +193,7 @@ export async function buildReport(input: { query: string; intent: Intent; sectio
     sentinel,
     next_steps: nextStepsFor(items, contradictions),
     sources,
-    stats: { sections: items.length, cache_hits: items.filter((i) => i.cache === "hit").length, cache_misses: items.filter((i) => i.cache === "miss").length, facts_confirmed: all.filter((f) => f.status === "confirmed").length, facts_contradicted: all.filter((f) => f.status === "contradiction").length },
+    stats: { sections: items.length, live_sections: items.filter((i) => i.status !== "needs_confirmation").length, facts_confirmed: all.filter((f) => f.status === "confirmed").length, facts_contradicted: all.filter((f) => f.status === "contradiction").length },
     translation: { via: input.language === "en" ? "none" : "glossary", model: null, glossary_lang: glossaryLang(input.language) },
   };
   return report;

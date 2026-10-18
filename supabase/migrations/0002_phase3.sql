@@ -42,9 +42,3 @@ alter table public.users add column if not exists telegram_chat_id text;
 
 alter table public.sentinels      enable row level security;
 alter table public.monitor_events enable row level security;
-
--- popular-pages view used by the nightly prefetch cron
-create or replace view public.lokmitra_popular_pages as
-  select key, url, hits, fetched_at from public.content_cache
-  where kind = 'fetch' and url is not null
-  order by hits desc, fetched_at desc;

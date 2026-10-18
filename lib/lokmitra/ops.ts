@@ -3,10 +3,10 @@ import { tf, tfRaw, TinyFishError, type TfFetchResponse, type TfRun, type TfSear
 import { cfg } from "./config";
 import { db, safe, type Row } from "./db";
 import { logRun, updateRunLog } from "./store";
-import { chunk, clip, hostOf, nowIso, sha256, sseEvents } from "./util";
+import { chunk, clip, hostOf, sseEvents } from "./util";
 
 /* ================================================================== */
-/* Wallet / cost guard                                                 */
+/* Wallet — purely informational (no budget cap, no spend ceiling)     */
 /* ================================================================== */
 export interface Rates {
   step: number;
@@ -15,17 +15,18 @@ export interface Rates {
   source: "wallet" | "fallback";
 }
 
-let walletCache: { at: number; wallet: TfWallet | null; error?: string } | null = null;
-
-export async function getWallet(force = false): Promise<{ wallet: TfWallet | null; error?: string }> {
-  if (!force && walletCache && Date.now() - walletCache.at < 20_000) return walletCache;
+/**
+ * Live wallet read. There is deliberately NO memoisation: every call asks TinyFish
+ * for the real current balance + rates. The wallet is shown for transparency only —
+ * it never throttles, defers or alters what LokMitra does.
+ */
+export async function getWallet(): Promise<{ wallet: TfWallet | null; error?: string }> {
   try {
     const w = await tf<TfWallet>("agent", "/v1/wallet", { timeoutMs: 12_000 });
-    walletCache = { at: Date.now(), wallet: w };
+    return { wallet: w };
   } catch (e) {
-    walletCache = { at: Date.now(), wallet: null, error: (e as Error).message };
+    return { wallet: null, error: (e as Error).message };
   }
-  return walletCache;
 }
 
 export function ratesFrom(w: TfWallet | null): Rates {
@@ -50,38 +51,14 @@ export async function rates(): Promise<Rates> {
   return ratesFrom((await getWallet()).wallet);
 }
 
-export interface GuardResult {
-  allowed: boolean;
-  balance: number | null;
-  estimate_usd: number;
-  reason?: string;
-  rates: Rates;
-}
-
-/**
- * Wallet guard: refuse a paid Agent/Browser run if the live wallet would drop below MIN_WALLET_USD,
- * or if LokMitra's own logged spend has crossed the DECK_BUDGET_USD ceiling.
- * Graceful degradation — callers fall back to Fetch + LLM guidance.
- */
-export async function walletGuard(estSteps: number): Promise<GuardResult> {
-  const { wallet, error } = await getWallet();
-  const r = ratesFrom(wallet);
-  const estimate = Math.round(estSteps * r.step * 10000) / 10000;
-  const balance = wallet ? Number(wallet.available_balance) : null;
-  if (balance === null) return { allowed: false, balance, estimate_usd: estimate, rates: r, reason: `wallet unavailable (${error ?? "unknown"})` };
-  if (balance - estimate < cfg.minWalletUsd()) return { allowed: false, balance, estimate_usd: estimate, rates: r, reason: `wallet low: $${balance.toFixed(3)} (floor $${cfg.minWalletUsd()})` };
-  const spent = await lokmitraSpend();
-  if (spent + estimate > cfg.budgetUsd()) return { allowed: false, balance, estimate_usd: estimate, rates: r, reason: `LokMitra budget reached: $${spent.toFixed(3)} of $${cfg.budgetUsd()}` };
-  return { allowed: true, balance, estimate_usd: estimate, rates: r };
-}
-
+/** Informational only: what LokMitra has spent according to its own audit log. Never used as a limit. */
 export async function lokmitraSpend(): Promise<number> {
   const rows = await safe(db.select<Row>("runs_log", { select: "cost_usd", limit: 5000, order: { col: "created_at" } }), []);
   return rows.reduce((a, r) => a + Number(r.cost_usd ?? 0), 0);
 }
 
 /* ================================================================== */
-/* search_schemes — TinyFish Search (FREE)                             */
+/* search_schemes — TinyFish Search, LIVE on every call (no cache)     */
 /* ================================================================== */
 export interface SearchHit {
   title: string;
@@ -94,43 +71,33 @@ export interface SearchHit {
 
 export async function search_schemes(
   query: string,
-  opts: { include_domains?: string[]; purpose?: string; scheme_id?: string; state_code?: string; recency_minutes?: number; cacheTtlSec?: number; domain_type?: "web" | "news" } = {},
-): Promise<{ hits: SearchHit[]; cached: boolean; error?: string }> {
+  opts: { include_domains?: string[]; purpose?: string; scheme_id?: string; state_code?: string; recency_minutes?: number; domain_type?: "web" | "news" } = {},
+): Promise<{ hits: SearchHit[]; error?: string; latency_ms: number }> {
   const q = query.trim().slice(0, 400);
-  const key = sha256(`search|${q}|${(opts.include_domains ?? []).join(",")}|${opts.domain_type ?? ""}`);
-  const ttl = opts.cacheTtlSec ?? cfg.cacheTtlSec();
-  const cachedRow = await safe(db.one<Row>("content_cache", { eq: { key } }), null);
-  if (cachedRow && Date.now() - new Date(String(cachedRow.fetched_at)).getTime() < ttl * 1000) {
-    void safe(db.update("content_cache", { key }, { hits: Number(cachedRow.hits ?? 0) + 1 }), []);
-    void logRun({ surface: "search", purpose: opts.purpose ?? "search", scheme_id: opts.scheme_id, state_code: opts.state_code, cache: "hit", latency_ms: 0, meta: { q: clip(q, 120) } });
-    return { hits: (cachedRow.body as { hits: SearchHit[] }).hits ?? [], cached: true };
-  }
   const t0 = Date.now();
   try {
-    const query: Record<string, string | number | undefined> = { query: q, location: "IN", language: "en" };
-    if (opts.purpose) query.purpose = opts.purpose.slice(0, 300);
-    if (opts.include_domains?.length) query.include_domains = opts.include_domains.slice(0, 20).join(",");
-    if (opts.recency_minutes) query.recency_minutes = opts.recency_minutes;
-    if (opts.domain_type) query.domain_type = opts.domain_type;
-    let res = await tf<TfSearchResponse>("search", "/", { query, timeoutMs: 20_000 });
+    const params: Record<string, string | number | undefined> = { query: q, location: "IN", language: "en" };
+    if (opts.purpose) params.purpose = opts.purpose.slice(0, 300);
+    if (opts.include_domains?.length) params.include_domains = opts.include_domains.slice(0, 20).join(",");
+    if (opts.recency_minutes) params.recency_minutes = opts.recency_minutes;
+    if (opts.domain_type) params.domain_type = opts.domain_type;
+    let res = await tf<TfSearchResponse>("search", "/", { query: params, timeoutMs: 20_000 });
     // domain restriction can be too strict for state-specific portals → widen once
     if (!res.results?.length && opts.include_domains?.length) {
-      delete query.include_domains;
-      res = await tf<TfSearchResponse>("search", "/", { query, timeoutMs: 20_000 });
+      delete params.include_domains;
+      res = await tf<TfSearchResponse>("search", "/", { query: params, timeoutMs: 20_000 });
     }
     const hits: SearchHit[] = (res.results ?? []).slice(0, 10).map((r) => ({ title: r.title, url: r.url, snippet: r.snippet, site_name: r.site_name, position: r.position, date: r.date }));
-    await safe(db.insert("content_cache", { key, kind: "search", query: q, body: { hits }, fetched_at: nowIso(), hits: 0 }, { onConflict: "key" }), []);
-    void logRun({ surface: "search", purpose: opts.purpose ?? "search", scheme_id: opts.scheme_id, state_code: opts.state_code, cache: "miss", latency_ms: Date.now() - t0, meta: { q: clip(q, 120), n: hits.length } });
-    return { hits, cached: false };
+    void logRun({ surface: "search", purpose: opts.purpose ?? "search", scheme_id: opts.scheme_id, state_code: opts.state_code, latency_ms: Date.now() - t0, meta: { q: clip(q, 120), n: hits.length } });
+    return { hits, latency_ms: Date.now() - t0 };
   } catch (e) {
-    void logRun({ surface: "search", purpose: opts.purpose ?? "search", scheme_id: opts.scheme_id, status: "error", latency_ms: Date.now() - t0, meta: { q: clip(q, 120), err: (e as Error).message } });
-    if (cachedRow) return { hits: (cachedRow.body as { hits: SearchHit[] }).hits ?? [], cached: true, error: (e as Error).message };
-    return { hits: [], cached: false, error: (e as Error).message };
+    void logRun({ surface: "search", purpose: opts.purpose ?? "search", scheme_id: opts.scheme_id, state_code: opts.state_code, status: "error", latency_ms: Date.now() - t0, meta: { q: clip(q, 120), err: (e as Error).message } });
+    return { hits: [], error: (e as Error).message, latency_ms: Date.now() - t0 };
   }
 }
 
 /* ================================================================== */
-/* fetch_clean_markdown — TinyFish Fetch (FREE), batched ≤10, cached   */
+/* fetch_clean_markdown — TinyFish Fetch, LIVE, batched ≤10 per request */
 /* ================================================================== */
 export interface FetchedPage {
   url: string;
@@ -139,91 +106,45 @@ export interface FetchedPage {
   language: string | null;
   text: string;
   links?: string[];
-  cached: boolean;
   etag?: string | null;
   last_modified?: string | null;
   latency_ms?: number | null;
   error?: string;
 }
 
-const MAX_STORED_CHARS = 40_000;
-
-const FETCH_FAIL_TTL_MS = 30 * 60_000;
-
+/**
+ * Every URL is fetched live from the real portal on every call. Nothing is stored or
+ * reused: no content cache, no stale fallback, no negative cache of dead links.
+ * Batches of up to 10 URLs per request (TinyFish Fetch limit) run in parallel.
+ */
 export async function fetch_clean_markdown(
   urls: string[],
-  opts: { purpose?: string; ttlSec?: number; links?: boolean; scheme_id?: string; state_code?: string; force?: boolean; maxChars?: number } = {},
+  opts: { purpose?: string; links?: boolean; scheme_id?: string; state_code?: string; maxChars?: number; perUrlTimeoutMs?: number } = {},
 ): Promise<FetchedPage[]> {
   const list = [...new Set(urls.filter((u) => /^https?:\/\//.test(u)))].slice(0, 50);
-  const ttl = opts.ttlSec ?? cfg.cacheTtlSec();
   const out = new Map<string, FetchedPage>();
-  const toFetch: string[] = [];
-  const stale = new Map<string, Row>();
-
-  for (const u of list) {
-    const key = sha256(`fetch|${u}`);
-    // negative cache: a URL that just failed (unreachable / 403 / proxy error) is skipped for
-    // FETCH_FAIL_TTL so a dead government mirror does not add a 45 s timeout to every citizen.
-    if (!opts.force) {
-      const neg = await safe(db.one<Row>("content_cache", { eq: { key: sha256(`fetchfail|${u}`) } }), null);
-      if (neg && Date.now() - new Date(String(neg.fetched_at)).getTime() < FETCH_FAIL_TTL_MS) {
-        const old = await safe(db.one<Row>("content_cache", { eq: { key } }), null);
-        const b = (old?.body ?? {}) as { text?: string; final_url?: string };
-        out.set(u, old ? { url: u, final_url: b.final_url ?? u, title: (old.title as string) ?? null, language: null, text: b.text ?? "", cached: true, error: "recently unreachable; served stale cache" } : { url: u, final_url: null, title: null, language: null, text: "", cached: true, error: `${String((neg.body as { error?: string })?.error ?? "unreachable")} (skipped, retry after cool-down)` });
-        continue;
+  await Promise.all(
+    chunk(list, 10).map(async (batch) => {
+      const t0 = Date.now();
+      try {
+        const body: Record<string, unknown> = { urls: batch, format: "markdown", per_url_timeout_ms: opts.perUrlTimeoutMs ?? 30_000, include_etag_and_last_modified: true, links: opts.links === true };
+        if (opts.purpose) body.purpose = opts.purpose.slice(0, 500);
+        const res = await tf<TfFetchResponse & { results: (TfFetchResponse["results"][number] & { links?: string[]; etag?: string; last_modified?: string })[] }>("fetch", "/", { method: "POST", body, timeoutMs: 120_000 });
+        for (const r of res.results ?? []) {
+          const text = typeof r.text === "string" ? r.text : r.text ? JSON.stringify(r.text) : "";
+          out.set(r.url, { url: r.url, final_url: r.final_url, title: r.title, language: r.language, text, links: r.links, etag: r.etag ?? null, last_modified: r.last_modified ?? null, latency_ms: r.latency_ms ?? null });
+        }
+        for (const e of res.errors ?? []) out.set(e.url, { url: e.url, final_url: null, title: null, language: null, text: "", error: e.error });
+        void logRun({ surface: "fetch", purpose: opts.purpose ?? "fetch", scheme_id: opts.scheme_id, state_code: opts.state_code, latency_ms: Date.now() - t0, meta: { n: batch.length, ok: res.results?.length ?? 0, errors: (res.errors ?? []).map((e) => `${hostOf(e.url)}:${e.error}`) } });
+      } catch (e) {
+        void logRun({ surface: "fetch", purpose: opts.purpose ?? "fetch", scheme_id: opts.scheme_id, state_code: opts.state_code, status: "error", latency_ms: Date.now() - t0, meta: { n: batch.length, err: (e as Error).message } });
+        for (const u of batch) out.set(u, { url: u, final_url: null, title: null, language: null, text: "", error: (e as Error).message });
       }
-    }
-    const row = opts.force ? null : await safe(db.one<Row>("content_cache", { eq: { key } }), null);
-    if (row && Date.now() - new Date(String(row.fetched_at)).getTime() < ttl * 1000) {
-      const b = row.body as { text?: string; final_url?: string; links?: string[] };
-      out.set(u, { url: u, final_url: b.final_url ?? u, title: (row.title as string) ?? null, language: (row.language as string) ?? null, text: b.text ?? "", links: b.links, cached: true, etag: (row.etag as string) ?? null });
-      void safe(db.update("content_cache", { key }, { hits: Number(row.hits ?? 0) + 1 }), []);
-    } else {
-      if (row) stale.set(u, row);
-      toFetch.push(u);
-    }
-  }
-  if (out.size) void logRun({ surface: "fetch", purpose: opts.purpose ?? "fetch", scheme_id: opts.scheme_id, state_code: opts.state_code, cache: "hit", latency_ms: 0, meta: { n: out.size, hosts: [...out.keys()].map(hostOf).slice(0, 10) } });
-
-  for (const batch of chunk(toFetch, 10)) {
-    const t0 = Date.now();
-    try {
-      const body: Record<string, unknown> = { urls: batch, format: "markdown", per_url_timeout_ms: 45_000, include_etag_and_last_modified: true, links: opts.links === true };
-      if (opts.purpose) body.purpose = opts.purpose.slice(0, 500);
-      const res = await tf<TfFetchResponse & { results: (TfFetchResponse["results"][number] & { links?: string[]; etag?: string; last_modified?: string })[] }>("fetch", "/", { method: "POST", body, timeoutMs: 120_000 });
-      for (const r of res.results ?? []) {
-        const text = typeof r.text === "string" ? r.text : r.text ? JSON.stringify(r.text) : "";
-        const page: FetchedPage = { url: r.url, final_url: r.final_url, title: r.title, language: r.language, text, links: r.links, cached: false, etag: r.etag ?? null, last_modified: r.last_modified ?? null, latency_ms: r.latency_ms ?? null };
-        out.set(r.url, page);
-        await safe(
-          db.insert(
-            "content_cache",
-            { key: sha256(`fetch|${r.url}`), kind: "fetch", url: r.url, title: r.title, language: r.language, etag: r.etag ?? null, last_modified: r.last_modified ?? null, body: { text: text.slice(0, MAX_STORED_CHARS), final_url: r.final_url, links: (r.links ?? []).slice(0, 200) }, fetched_at: nowIso(), hits: Number(stale.get(r.url)?.hits ?? 0) },
-            { onConflict: "key" },
-          ),
-          [],
-        );
-      }
-      for (const e of res.errors ?? []) {
-        void safe(db.insert("content_cache", { key: sha256(`fetchfail|${e.url}`), kind: "fetch", url: e.url, title: null, language: null, etag: null, last_modified: null, body: { error: e.error }, fetched_at: nowIso(), hits: 0 }, { onConflict: "key" }), []);
-        const old = stale.get(e.url);
-        if (old) {
-          const b = old.body as { text?: string; final_url?: string };
-          out.set(e.url, { url: e.url, final_url: b.final_url ?? e.url, title: (old.title as string) ?? null, language: null, text: b.text ?? "", cached: true, error: `live fetch failed (${e.error}); served stale cache` });
-        } else out.set(e.url, { url: e.url, final_url: null, title: null, language: null, text: "", cached: false, error: e.error });
-      }
-      void logRun({ surface: "fetch", purpose: opts.purpose ?? "fetch", scheme_id: opts.scheme_id, state_code: opts.state_code, cache: "miss", latency_ms: Date.now() - t0, meta: { n: batch.length, ok: res.results?.length ?? 0, errors: (res.errors ?? []).map((e) => `${hostOf(e.url)}:${e.error}`) } });
-    } catch (e) {
-      void logRun({ surface: "fetch", purpose: opts.purpose ?? "fetch", scheme_id: opts.scheme_id, status: "error", latency_ms: Date.now() - t0, meta: { n: batch.length, err: (e as Error).message } });
-      for (const u of batch) {
-        const old = stale.get(u);
-        out.set(u, old ? { url: u, final_url: u, title: (old.title as string) ?? null, language: null, text: (old.body as { text?: string }).text ?? "", cached: true, error: `served stale cache: ${(e as Error).message}` } : { url: u, final_url: null, title: null, language: null, text: "", cached: false, error: (e as Error).message });
-      }
-    }
-  }
+    }),
+  );
   const maxChars = opts.maxChars ?? 16_000;
   return list.map((u) => {
-    const p = out.get(u) ?? { url: u, final_url: null, title: null, language: null, text: "", cached: false, error: "not fetched" };
+    const p = out.get(u) ?? { url: u, final_url: null, title: null, language: null, text: "", error: "not fetched" };
     return { ...p, text: p.text.slice(0, maxChars) };
   });
 }
@@ -280,9 +201,10 @@ export function agentBody(g: AgentGoal) {
       // "strict" needs the TinyFish beta flag on the account; default mode works everywhere.
       ...(cfg.agentMode() === "strict" ? { mode: "strict" } : {}),
       cursor_style: "fish",
-      // max_steps is beta-gated at TinyFish; by default the wall-clock cap below bounds spend instead.
-      ...(cfg.sendMaxSteps() ? { max_steps: Math.min(g.max_steps ?? cfg.maxAgentSteps(), cfg.maxAgentSteps()) } : {}),
-      max_duration_seconds: g.max_duration_seconds ?? (Number(process.env.TINYFISH_MAX_DURATION_SECONDS || 0) || 90),
+      // No budget cap: max_steps is never forced. Only an explicit per-goal max_steps is passed (beta-gated field).
+      ...(cfg.sendMaxSteps() && g.max_steps ? { max_steps: g.max_steps } : {}),
+      // functional wall-clock limit so a run fits inside one serverless request (not a cost cap)
+      ...(g.max_duration_seconds || cfg.agentMaxDurationSec() ? { max_duration_seconds: g.max_duration_seconds ?? cfg.agentMaxDurationSec() } : {}),
     },
     capture_config: { screenshots: true },
     browser_profile: g.browser_profile ?? "stealth",
@@ -320,7 +242,7 @@ export async function* run_agent_goal(g: AgentGoal, signal?: AbortSignal): Async
       const ev = raw as AgentEvent;
       if (ev.type === "STARTED" && ev.run_id) {
         runId = ev.run_id;
-        await logRun({ surface: "agent", purpose: g.purpose, scheme_id: g.scheme_id, state_code: g.state_code, run_id: runId, status: "running", cache: "miss", meta: { host: hostOf(g.url), max_steps: g.max_steps } });
+        await logRun({ surface: "agent", purpose: g.purpose, scheme_id: g.scheme_id, state_code: g.state_code, run_id: runId, status: "running", meta: { host: hostOf(g.url), max_steps: g.max_steps } });
         logged = true;
       }
       if (ev.type === "STREAMING_URL" && ev.streaming_url) streaming = ev.streaming_url;
@@ -395,7 +317,7 @@ export async function start_agent_async(g: AgentGoal): Promise<{ run_id: string 
   const t0 = Date.now();
   try {
     const res = await tf<{ run_id: string | null; error: { code: string; message: string } | null }>("agent", "/v1/automation/run-async", { method: "POST", body: agentBody(g), timeoutMs: 30_000 });
-    await logRun({ surface: "agent", purpose: g.purpose, scheme_id: g.scheme_id, state_code: g.state_code, run_id: res.run_id, status: res.run_id ? "running" : "error", cache: "miss", latency_ms: Date.now() - t0, meta: { host: hostOf(g.url), async: true } });
+    await logRun({ surface: "agent", purpose: g.purpose, scheme_id: g.scheme_id, state_code: g.state_code, run_id: res.run_id, status: res.run_id ? "running" : "error", latency_ms: Date.now() - t0, meta: { host: hostOf(g.url), async: true } });
     return { run_id: res.run_id, error: res.error?.message };
   } catch (e) {
     return { run_id: null, error: (e as Error).message };
@@ -406,10 +328,7 @@ export async function start_agent_async(g: AgentGoal): Promise<{ run_id: string 
 /* parallel_cross_check — several Agent goals at once (multi-domain)   */
 /* ================================================================== */
 export async function parallel_cross_check(goals: AgentGoal[], onEvent?: (idx: number, e: AgentEvent) => void | Promise<void>, signal?: AbortSignal): Promise<AgentOutcome[]> {
-  const est = goals.reduce((a, g) => a + (g.max_steps ?? 8), 0);
-  const guard = await walletGuard(est);
-  if (!guard.allowed) return goals.map(() => ({ run_id: null, status: "ERROR" as const, result: null, steps: 0, cost_usd: 0, streaming_url: null, error: `wallet guard: ${guard.reason}` }));
-  return Promise.all(goals.slice(0, 5).map((g, i) => drainAgent(run_agent_goal(g, signal), (e) => onEvent?.(i, e))));
+  return Promise.all(goals.map((g, i) => drainAgent(run_agent_goal(g, signal), (e) => onEvent?.(i, e))));
 }
 
 /* ================================================================== */

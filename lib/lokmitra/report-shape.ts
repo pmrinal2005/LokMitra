@@ -25,7 +25,7 @@ export interface ReportItem {
   reasons_local?: string[];
   facts: KeyFact[];
   fact_check: FactResult[];
-  cache: "hit" | "miss";
+  live?: boolean;
   sources: string[];
   diy: string[];
   diy_local?: string[];
@@ -87,7 +87,7 @@ export interface StructuredReport {
   sentinel: SentinelFact[];
   next_steps: NextStep[];
   sources: string[];
-  stats: { sections: number; cache_hits: number; cache_misses: number; facts_confirmed: number; facts_contradicted: number };
+  stats: { sections: number; live_sections: number; facts_confirmed: number; facts_contradicted: number };
   translation: { via: "groq" | "glossary" | "none"; model?: string | null; glossary_lang: string };
 }
 

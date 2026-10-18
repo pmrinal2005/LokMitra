@@ -86,7 +86,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             </div>
           </div>
           <div className="meta" style={{ textAlign: "right" }}>
-            {Number(r.cache_hits ?? 0)}/{Number(r.cache_hits ?? 0) + Number(r.cache_misses ?? 0)} {L("from_cache", viewLang)}
+            ● {L("live_fetched", viewLang)}
             <br />
             {L("cost", viewLang)} ${cost.toFixed(3)}
           </div>

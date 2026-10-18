@@ -14,18 +14,18 @@ function cscUserId(name: string) {
 
 interface Lang { code: string; name: string; native: string; speech: string; priority: boolean }
 interface St { code: string; name: string; hindi: string }
-interface Confirm { confirm_id: string; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; cached_path: boolean; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
-interface Section { scheme_id: string; scheme_name: string; task: string; status: string; data: Record<string, unknown> | null; sources: string[]; diy: string[]; cache: "hit" | "miss"; portal_state: string; confirm?: Confirm; benefit?: string }
-interface CacheEv { scheme: string; task: string; state: string; hit: boolean; source?: string; hits?: number; search_results?: number; error?: string }
+interface Confirm { confirm_id: string; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
+interface Section { scheme_id: string; scheme_name: string; task: string; status: string; data: Record<string, unknown> | null; sources: string[]; diy: string[]; live?: boolean; portal_state: string; search?: { query: string; results: number; error?: string | null; latency_ms: number }; confirm?: Confirm; benefit?: string }
+interface SearchEv { scheme: string; task: string; state: string; query?: string; results: number; top?: string[]; resolved_via?: string; latency_ms?: number; error?: string | null }
 interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean; needs_captcha?: boolean; relay_id?: string | null; cost_usd?: number }
 interface Turn {
   id: string;
   q: string;
   stages: string[];
-  cache: CacheEv[];
-  pages: { url: string; title: string | null; cached: boolean; chars: number; error: string | null }[];
+  searches: SearchEv[];
+  pages: { url: string; title: string | null; chars: number; latency_ms?: number | null; error: string | null }[];
   sections: Section[];
-  report?: { report_id: string; summary_local: string; summary_en: string; language: string; cache_hits?: number; cache_misses?: number; elapsed_ms?: number; follow_up?: boolean; structured?: StructuredReport | null };
+  report?: { report_id: string; summary_local: string; summary_en: string; language: string; live_calls?: { search: number; fetch_urls: number; fetch_ok: number }; elapsed_ms?: number; follow_up?: boolean; structured?: StructuredReport | null };
   structured?: StructuredReport | null;
   intent?: { intent: Record<string, unknown>; via: string };
   error?: string;
@@ -121,7 +121,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
     const query = (q ?? text).trim();
     if (!query || busy) return;
     const id = `t${Date.now()}`;
-    setTurns((ts) => [...ts, { id, q: query, stages: [], cache: [], pages: [], sections: [], done: false }]);
+    setTurns((ts) => [...ts, { id, q: query, stages: [], searches: [], pages: [], sections: [], done: false }]);
     setText("");
     setBusy(true);
     const ctrl = new AbortController();
@@ -133,7 +133,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
         ({ event, data }) => {
           if (event === "stage") patchTurn(id, (t) => ({ ...t, stages: [...t.stages, String(data.message)] }));
           else if (event === "intent") patchTurn(id, (t) => ({ ...t, intent: { intent: data.intent as Record<string, unknown>, via: String(data.via) } }));
-          else if (event === "cache") patchTurn(id, (t) => ({ ...t, cache: [...t.cache, data as unknown as CacheEv] }));
+          else if (event === "search") patchTurn(id, (t) => ({ ...t, searches: [...t.searches, data as unknown as SearchEv] }));
           else if (event === "fetch") patchTurn(id, (t) => ({ ...t, pages: (data.pages as Turn["pages"]) ?? [] }));
           else if (event === "section") patchTurn(id, (t) => ({ ...t, sections: [...t.sections.filter((s) => !(s.scheme_id === data.scheme_id && s.task === data.task)), data as unknown as Section] }));
           else if (event === "structured") patchTurn(id, (t) => ({ ...t, structured: data as unknown as StructuredReport }));
@@ -229,12 +229,12 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
         <div>
           <h1>{csc ? "CSC Sahayak Desk" : "LokMitra Sahayak"}</h1>
           <p>
-            Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Public information is read for free from official portals via TinyFish Search + Fetch; personal checks always ask before spending.
+            Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Every question is answered live: TinyFish Search locates the official portal and Fetch reads it right now — nothing is cached, so repeat questions run in full again. Personal checks run a live TinyFish Agent only after your consent.
           </p>
         </div>
         <div className="row">
-          <span className="chip hit">Search · Fetch = FREE</span>
-          <span className="chip miss">Agent = paid, on consent</span>
+          <span className="chip live">● 100% live · no cache</span>
+          <span className="chip miss">Agent = on consent</span>
         </div>
       </header>
 
@@ -271,18 +271,18 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                   </span>
                 )}
               </div>
-              {t.cache.length > 0 && (
+              {t.searches.length > 0 && (
                 <div className="row" style={{ marginTop: 10 }}>
-                  {t.cache.map((c, i) => (
-                    <span key={i} className={`chip ${c.hit ? "hit" : "miss"}`} title={c.error ?? `${c.source ?? ""} · ${c.hits ?? 0} citizens served`}>
-                      {c.hit ? "⚡ cache HIT" : `🔎 MISS → free Search (${c.search_results ?? 0})`} · {c.scheme} · {c.task} · {c.state}
+                  {t.searches.map((c, i) => (
+                    <span key={i} className={`chip ${c.error ? "miss" : "live"}`} title={c.error ?? `${c.query ?? ""}${c.top?.length ? `\n${c.top.join("\n")}` : ""}`}>
+                      🔎 live Search · {c.results} result(s){c.latency_ms ? ` · ${(c.latency_ms / 1000).toFixed(1)}s` : ""} · {c.scheme} · {c.task} · {c.state}
                     </span>
                   ))}
                 </div>
               )}
               {t.pages.length > 0 && (
                 <div className="note" style={{ marginTop: 8 }}>
-                  Read {t.pages.length} official page(s) via TinyFish Fetch: {t.pages.map((p) => `${hostOf(p.url)}${p.cached ? " (cached)" : ""}${p.error ? " ✕" : ""}`).join(" · ")}
+                  Live TinyFish Fetch read {t.pages.filter((p) => !p.error && p.chars > 0).length}/{t.pages.length} official page(s) just now: {t.pages.map((p) => `${hostOf(p.url)}${p.error ? " ✕" : ` ✓${p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""}`}`).join(" · ")}
                 </div>
               )}
 
@@ -290,7 +290,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                 <div className="row gate-bar" style={{ marginTop: 12 }}>
                   <span className="note">🔀 {t.sections.filter((s) => s.confirm).length} personal checks found — run them side by side (parallel cross-verification).</span>
                   <button className="btn sm paid" onClick={() => crossCheck(t)}>
-                    Run all in parallel ≈ {fmtUsd(t.sections.reduce((a, s) => a + (s.confirm && !runs[s.confirm.confirm_id] ? s.confirm.est_cost_usd : 0), 0))}
+                    Run all live in parallel
                   </button>
                 </div>
               )}
@@ -302,10 +302,10 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                   <div key={c.confirm_id} className="gate" style={{ marginTop: 12 }}>
                     <div className="row" style={{ justifyContent: "space-between" }}>
                       <b>🔐 {c.scheme_name} — personal {c.task} check</b>
-                      <span className="chip paid">~{c.est_steps} steps ≈ {fmtUsd(c.est_cost_usd)} {c.cached_path ? "· cached path" : "· first discovery"}</span>
+                      <span className="chip live" title="Informational estimate only — there is no step limit or budget cap">● live agent · typically ~{c.est_steps} steps ≈ {fmtUsd(c.est_cost_usd)}</span>
                     </div>
                     <span className="note">
-                      A TinyFish agent will open <b>{hostOf(c.entry_url)}</b> and read your status. It never submits anything. Your identifiers are used once, masked in logs.{c.requires_otp ? " This portal may send an OTP to your registered mobile." : ""}
+                      A TinyFish agent will open <b>{hostOf(c.entry_url)}</b> live (portal located by a fresh Search right now) and read your status. It never submits anything. Your identifiers are used once, masked in logs.{c.requires_otp ? " This portal may send an OTP to your registered mobile." : ""}
                     </span>
                     <div className="field-grid">
                       {c.fields.map((f) => (
@@ -371,7 +371,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                   <hr className="hr" style={{ margin: "12px 0" }} />
                   <div className="row" style={{ justifyContent: "space-between" }}>
                     <span className="note">
-                      ⚡ {t.report.cache_hits ?? 0}/{(t.report.cache_hits ?? 0) + (t.report.cache_misses ?? 0)} from LokMitra cache · {((t.report.elapsed_ms ?? 0) / 1000).toFixed(1)}s · $0.00 Wallet
+                      ● live: {t.report.live_calls?.search ?? 0} Search · {t.report.live_calls?.fetch_ok ?? 0}/{t.report.live_calls?.fetch_urls ?? 0} pages fetched now · {((t.report.elapsed_ms ?? 0) / 1000).toFixed(1)}s · nothing cached
                     </span>
                     {!t.report.follow_up && (
                       <div className="row">
@@ -392,7 +392,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     {t.sections.map((s) => (
                       <div key={`${s.scheme_id}:${s.task}`} className="section-card">
                         <h4>
-                          {s.scheme_name} <span className="chip">{s.task}</span> <span className={`chip ${s.cache}`}>{s.cache}</span> <span className="chip">{s.status}</span>
+                          {s.scheme_name} <span className="chip">{s.task}</span> <span className="chip live">live{s.search ? ` · ${s.search.results} search results` : ""}</span> <span className="chip">{s.status}</span>
                         </h4>
                         <pre className="mono note" style={{ whiteSpace: "pre-wrap", margin: 0, maxHeight: 220, overflow: "auto" }}>{JSON.stringify(s.data, null, 2)}</pre>
                         <div className="note">DIY: {s.diy.join(" → ")}</div>

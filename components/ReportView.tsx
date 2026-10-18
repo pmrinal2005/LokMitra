@@ -16,7 +16,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
     <div className={`report-view ${tone}`} lang={l}>
       <p className="rv-headline">{pick(r.headline, r.headline_local)}</p>
       <div className="rv-stats">
-        <span className="chip hit">⚡ {r.stats.cache_hits}/{r.stats.sections} {L("from_cache", l)}</span>
+        <span className="chip hit">● {r.stats.live_sections ?? r.stats.sections}/{r.stats.sections} {L("live_fetched", l)}</span>
         <span className="chip">✓ {r.stats.facts_confirmed} {L("confirmed", l)}</span>
         {r.stats.facts_contradicted > 0 && <span className="chip miss">⚠ {r.stats.facts_contradicted} {L("contradiction", l)}</span>}
         <span className="chip" title={r.translation.model ?? undefined}>
@@ -39,7 +39,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
                     <b>{it.scheme_name}</b>
                     {it.verdict !== "na" && <span className={`verdict v-${it.verdict}`}>{verdictLabel(it.verdict, l)}</span>}
                     <span className={`chip st-${it.status}`}>{statusLabel(it.status, l)}</span>
-                    <span className={`chip ${it.cache}`}>{it.cache === "hit" ? L("from_cache", l) : L("fresh", l)}</span>
+                    <span className="chip live">● {L("fresh", l)}</span>
                   </div>
                   {it.facts.length > 0 && (
                     <dl className="rv-facts">

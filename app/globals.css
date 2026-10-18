@@ -735,6 +735,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .chip.hit { color: var(--jade); border-color: rgba(110,242,160,.35); background: rgba(110,242,160,.06); }
 .chip.miss { color: var(--ember); border-color: rgba(255,180,79,.35); background: rgba(255,180,79,.06); }
 .chip.paid { color: var(--ember); }
+.chip.live { color: var(--teal); border-color: rgba(46,242,195,.35); background: rgba(46,242,195,.06); }
 .section-card { border-radius: 16px; border: 1px solid var(--hair); background: rgba(6,9,15,.4); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .section-card h4 { margin: 0; font-size: 14px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .gate { border-radius: 16px; border: 1px solid rgba(255,180,79,.35); background: linear-gradient(160deg, rgba(255,180,79,.08), rgba(6,9,15,.4)); padding: 14px; display: flex; flex-direction: column; gap: 10px; }

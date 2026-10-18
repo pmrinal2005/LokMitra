@@ -4,7 +4,7 @@ import { cfg } from "./config";
 import { db, safe, type Row } from "./db";
 import { extractFromMarkdown, translate } from "./groq";
 import { create_monitor, rates, run_monitor_now } from "./ops";
-import { resolvePortal } from "./portal";
+import { resolvePortalLive } from "./portal";
 import { schemeById, stateByCode } from "./schemes";
 import { logRun } from "./store";
 import { clip, hostOf, nowIso, sha256 } from "./util";
@@ -18,7 +18,7 @@ import { factCheck, type FactResult } from "./facts";
  *   deadline   → Page Monitor (type "fetch") on the scheme's notice/deadline page
  *   circular   → Topic Monitor (type "search") for new GR / circular PDFs
  *   compliance → Page Monitor on the guideline page; diffs are checked against the live
- *                portal_map facts by Groq to flag guideline-vs-portal contradictions
+ *                guideline facts (deterministic + Groq) to flag guideline-vs-portal contradictions
  * Scheduled runs POST to /api/webhooks/monitor → fan-out to every subscribed citizen.
  */
 
@@ -77,8 +77,9 @@ export async function ensureSentinel(opts: { scheme_id: string; state_code?: str
     type = "fetch";
     if (opts.target) target = opts.target;
     else {
-      const r = await resolvePortal(scheme.id, opts.kind === "deadline" ? "deadline" : "info", { state });
-      target = r.row.deep_links[0]?.url ?? scheme.entry;
+      // target page located with a LIVE TinyFish Search at registration time
+      const r = await resolvePortalLive(scheme.id, opts.kind === "deadline" ? "deadline" : "info", { state });
+      target = r.portal.deep_links[0]?.url ?? scheme.entry;
     }
     config = { url: target, format: "markdown" };
     purpose =

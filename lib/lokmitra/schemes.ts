@@ -1,10 +1,10 @@
 /**
  * LokMitra scheme & portal registry (shared client/server).
  * ------------------------------------------------------------------
- * This is the *seed knowledge*: official domains, search templates and
- * tight `output_schema`s. The live, authoritative URLs are discovered at
- * runtime with TinyFish Search (free) and written to `portal_map` —
- * "Discover Once, Fetch Forever". Schemas follow TinyFish's structured-
+ * Static code knowledge only: official domains, search templates and
+ * tight `output_schema`s. The live, authoritative URLs are located afresh
+ * on EVERY request with a live TinyFish Search (nothing is cached or
+ * written back). Schemas follow TinyFish's structured-
  * output subset (no additionalProperties/oneOf/const; nullable instead of
  * type arrays; top-level object).
  */
@@ -444,11 +444,11 @@ export function stateByCode(code: string | null | undefined) {
   return STATES.find((s) => s.code === code) ?? STATES[0];
 }
 
-/** Rough Agent step budget for the confirmation gate (shown to citizen before any paid run). */
-export function estimateSteps(task: TaskKind, cached: boolean): number {
-  if (task === "status") return cached ? 8 : 12;
-  if (task === "land") return cached ? 10 : 14;
-  return cached ? 4 : 6; // discovery of a public info path
+/** Typical Agent step count (informational estimate shown with the consent prompt — never a limit). */
+export function estimateSteps(task: TaskKind): number {
+  if (task === "status") return 12;
+  if (task === "land") return 14;
+  return 8; // live mapping of a portal's status checker
 }
 
 export function fill(tpl: string, v: Record<string, string | undefined | null>) {

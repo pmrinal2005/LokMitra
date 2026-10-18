@@ -117,7 +117,7 @@ export function structuredEmailHtml(o: { r: StructuredReport; lang: string; repo
   <div style="font-size:15px;font-weight:600">${esc(L("greeting", lang))}</div>
   ${o.query ? `<div style="font-size:12px;color:#666;margin-top:4px">${esc(L("question", lang))}: ${esc(o.query)}</div>` : ""}
   <p style="font-size:14px;line-height:1.5;margin:10px 0">${esc(pick(r.headline, r.headline_local))}</p>
-  <div style="font-size:11px;color:#555">⚡ ${r.stats.cache_hits}/${r.stats.sections} ${esc(L("from_cache", lang))} · ✓ ${r.stats.facts_confirmed} ${esc(L("confirmed", lang))}${r.stats.facts_contradicted ? ` · ⚠ ${r.stats.facts_contradicted}` : ""} · ${esc(L("cost", lang))} $${Number(o.cost_usd ?? 0).toFixed(3)}</div>
+  <div style="font-size:11px;color:#555">● ${r.stats.live_sections ?? r.stats.sections}/${r.stats.sections} ${esc(L("live_fetched", lang))} · ✓ ${r.stats.facts_confirmed} ${esc(L("confirmed", lang))}${r.stats.facts_contradicted ? ` · ⚠ ${r.stats.facts_contradicted}` : ""} · ${esc(L("cost", lang))} $${Number(o.cost_usd ?? 0).toFixed(3)}</div>
   ${sectors}
   ${list(`⚠ ${esc(L("contradictions", lang))}`, contra.length ? contra : [`✓ ${esc(L("no_contradictions", lang))}`], contra.length ? "#a3122e" : "#106b3a", contra.length ? "#fdf0f2" : "#fff")}
   ${list(`🔔 ${esc(L("sentinel", lang))}`, sent)}

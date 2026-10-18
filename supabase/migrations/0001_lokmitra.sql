@@ -19,43 +19,6 @@ create table if not exists public.users (
   updated_at    timestamptz not null default now()
 );
 
--- ── Discover-Once-Fetch-Forever: the shared "virtual API" registry ───────
-create table if not exists public.portal_map (
-  id               uuid primary key default gen_random_uuid(),
-  state_code       text not null,                 -- "IN" for national/central
-  scheme_id        text not null,                 -- e.g. "pm-kisan"
-  task             text not null,                 -- "info" | "status" | "land" | "deadline" ...
-  entry_url        text not null,                 -- official portal entry point
-  deep_links       jsonb not null default '[]',   -- [{url,label,kind}] free-Fetch targets
-  nav_path         jsonb not null default '[]',   -- ordered steps the Agent discovered
-  selectors        jsonb not null default '{}',   -- field labels / ids discovered by the Agent
-  output_schema    jsonb,                          -- schema used for status extraction
-  source           text not null default 'seed',  -- seed | search | agent
-  discovered_by_run text,                          -- TinyFish run_id that paid for this
-  discovery_cost_usd numeric(10,4) not null default 0,
-  hits             integer not null default 0,     -- citizens served from cache
-  last_verified_at timestamptz,
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now(),
-  unique (state_code, scheme_id, task)
-);
-
--- ── content cache for free Search/Fetch (keyed by URL/query hash + etag) ─
-create table if not exists public.content_cache (
-  key            text primary key,                -- sha256(kind|url-or-query)
-  kind           text not null check (kind in ('fetch','search')),
-  url            text,
-  query          text,
-  title          text,
-  language       text,
-  etag           text,
-  last_modified  text,
-  body           jsonb not null,                  -- trimmed text / results
-  fetched_at     timestamptz not null default now(),
-  hits           integer not null default 0
-);
-create index if not exists content_cache_fetched_idx on public.content_cache (fetched_at desc);
-
 -- ── Monitor sentinel subscriptions (fan-out to citizens) ─────────────────
 create table if not exists public.monitor_subscriptions (
   id           uuid primary key default gen_random_uuid(),
@@ -80,8 +43,8 @@ create table if not exists public.benefit_reports (
   summary_local text,
   sources       jsonb not null default '[]',
   cost_usd      numeric(10,4) not null default 0,
-  cache_hits    integer not null default 0,
-  cache_misses  integer not null default 0,
+  live_calls    jsonb not null default '{}',      -- {search, fetch_urls, fetch_ok} made live for this report
+  elapsed_ms    integer,
   created_at    timestamptz not null default now()
 );
 create index if not exists benefit_reports_created_idx on public.benefit_reports (created_at desc);
@@ -95,7 +58,6 @@ create table if not exists public.runs_log (
   scheme_id     text,
   run_id        text,                             -- TinyFish run/monitor/session id
   status        text not null default 'ok',
-  cache         text check (cache in ('hit','miss','bypass')),
   steps         integer,
   cost_usd      numeric(10,4) not null default 0,
   latency_ms    integer,
@@ -117,15 +79,7 @@ create table if not exists public.user_sessions (
 create index if not exists user_sessions_expiry_idx on public.user_sessions (expires_at);
 
 alter table public.users                 enable row level security;
-alter table public.portal_map            enable row level security;
-alter table public.content_cache         enable row level security;
 alter table public.monitor_subscriptions enable row level security;
 alter table public.benefit_reports       enable row level security;
 alter table public.runs_log              enable row level security;
 alter table public.user_sessions         enable row level security;
-
--- atomic hit counter used by the cache layer
-create or replace function public.lokmitra_portal_hit(p_id uuid)
-returns void language sql security definer as $$
-  update public.portal_map set hits = hits + 1, updated_at = now() where id = p_id;
-$$;
