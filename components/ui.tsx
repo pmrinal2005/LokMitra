@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
+import { Icon } from "./Icon";
 
 /** Shared dashboard primitives (no UI framework). */
 
@@ -116,8 +117,8 @@ export function Flash({ busy, error, notice }: { busy?: string | null; error?: s
   return (
     <>
       {busy && <Loading label={busy} />}
-      {error && <p className="note err">⚠ {error}</p>}
-      {notice && <p className="note ok">✓ {notice}</p>}
+      {error && <p className="note err"><Icon name="alert" /> {error}</p>}
+      {notice && <p className="note ok"><Icon name="check" /> {notice}</p>}
     </>
   );
 }

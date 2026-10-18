@@ -5,6 +5,7 @@ import { Flash, Json, PageHead, Panel, useAction, useApi } from "@/components/ui
 import { UsageInfrastructure } from "@/components/UsageInfrastructure";
 import { useRole } from "@/hooks/useRole";
 import { useT } from "@/lib/i18n/client";
+import { Icon } from "@/components/Icon";
 
 interface S {
   integrations: Record<string, boolean | string | null>;
@@ -47,7 +48,7 @@ export function Settings() {
             <input className="input" type="password" style={{ flex: 1 }} placeholder="ADMIN_TOKEN (leave empty in open demo mode)" value={tok} onChange={(e) => setTok(e.target.value)} />
             <button className="btn primary" onClick={async () => { setAdminToken(tok.trim()); await switchTo("operator"); }}>{t("role_switch_operator")}</button>
           </div>
-          {roleError && <p className="note err">⚠ {roleError}</p>}
+          {roleError && <p className="note err"><Icon name="alert" /> {roleError}</p>}
         </Panel>
       </div>
     );
@@ -57,6 +58,13 @@ export function Settings() {
 
 function OperatorSettings() {
   const [tab, setTab] = useState<"integrations" | "usage">(() => (typeof window !== "undefined" && window.location.hash === "#usage" ? "usage" : "integrations"));
+  // deep links (nav "Wallet" pill, sidebar wallet footer) may only change the hash on an already-open page
+  useEffect(() => {
+    const sync = () => setTab(window.location.hash === "#usage" ? "usage" : "integrations");
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
   const { t } = useT();
   const s = useApi<S>("/api/lokmitra/settings");
   const h = useApi<Health>("/api/health");
@@ -103,7 +111,7 @@ function OperatorSettings() {
   return (
     <div className="page">
       <PageHead title="Settings" sub="Integration health (no secret values are ever returned), execution guards, operator token, Telegram webhook, cron and a live endpoint probe.">
-        {d && <span className={`chip ${d.admin.you_are_admin ? "hit" : "miss"}`}>{d.admin.required ? (d.admin.you_are_admin ? "operator ✓" : "operator token needed") : "open demo mode"}</span>}
+        {d && <span className={`chip ${d.admin.you_are_admin ? "hit" : "miss"}`}>{d.admin.required ? (d.admin.you_are_admin ? "operator verified" : "operator token needed") : "open demo mode"}</span>}
       </PageHead>
       <Flash {...act} />
       <div className="mode-switch settings-tabs" role="tablist" aria-label="Settings sections">
@@ -111,7 +119,7 @@ function OperatorSettings() {
         <button role="tab" className="mode-btn" aria-selected={tab === "usage"} aria-pressed={tab === "usage"} onClick={() => { setTab("usage"); history.replaceState(null, "", "#usage"); }}>{t("tab_usage")}</button>
       </div>
       {tab === "usage" ? <UsageInfrastructure /> : <>
-      {s.error && <p className="note err">⚠ {s.error}</p>}
+      {s.error && <p className="note err"><Icon name="alert" /> {s.error}</p>}
 
       <div className="grid-2">
         <Panel title="Integrations" sub="Set these in Vercel → Project → Settings → Environment Variables.">
@@ -131,8 +139,8 @@ function OperatorSettings() {
               );
             })}
             <div className="note">Public base URL: <code>{String(d?.integrations.public_base_url ?? "— (set PUBLIC_BASE_URL or rely on VERCEL_URL)")}</code></div>
-            <div className="note">Database: <b>{d?.database.backend ?? "…"}</b> {d?.database.ok ? "✓" : d?.database.error ? `✕ ${d.database.error}` : ""}</div>
-            <div className="note">Server key check: {h.data ? (h.data.tinyfish_configured ? "✓ TINYFISH_API_KEY present" : "✕ TINYFISH_API_KEY missing") : "…"}</div>
+            <div className="note">Database: <b>{d?.database.backend ?? "…"}</b> {d?.database.ok ? <Icon name="check" /> : d?.database.error ? <><Icon name="x" /> {d.database.error}</> : null}</div>
+            <div className="note">Server key check: {h.data ? (h.data.tinyfish_configured ? <><Icon name="check" /> TINYFISH_API_KEY present</> : <><Icon name="x" /> TINYFISH_API_KEY missing</>) : "…"}</div>
           </div>
         </Panel>
 
@@ -174,7 +182,7 @@ function OperatorSettings() {
             <button className="btn sm" disabled={!!act.busy} onClick={tgStatus}>Bot status</button>
             <button className="btn sm" disabled={!!act.busy || !d?.integrations.telegram} onClick={tgSetup}>Register webhook</button>
             <button className="btn sm" disabled={!!act.busy} onClick={runCron}>Run nightly maintenance now</button>
-            <a className="btn sm" href="/bot-simulator">🤖 Bot Simulator (no token needed)</a>
+            <a className="btn sm" href="/bot-simulator"><Icon name="bot" /> Bot Simulator (no token needed)</a>
           </div>
           {d?.endpoints && (
             <div className="stack" style={{ gap: 4, marginTop: 10 }}>
@@ -193,7 +201,7 @@ function OperatorSettings() {
           <div className="table-wrap">
             <table className="tbl">
               <thead><tr><th /><th>Endpoint</th><th>Latency</th><th>Result</th></tr></thead>
-              <tbody>{verify.map((v) => <tr key={v.name}><td>{v.ok ? "✓" : "✕"}</td><td>{v.name}</td><td className="mono">{v.ms}ms</td><td className={v.ok ? "" : "note err"}>{v.note}</td></tr>)}</tbody>
+              <tbody>{verify.map((v) => <tr key={v.name}><td>{v.ok ? <Icon name="check" /> : <Icon name="x" />}</td><td>{v.name}</td><td className="mono">{v.ms}ms</td><td className={v.ok ? "" : "note err"}>{v.note}</td></tr>)}</tbody>
             </table>
           </div>
         )}

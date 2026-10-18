@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Kpi, PageHead, Panel } from "@/components/ui";
 import { citizenId, ssePost } from "@/lib/client";
+import { Icon } from "@/components/Icon";
 
 interface Tick {
   at: string;
@@ -129,7 +130,7 @@ export function Judge() {
                 <polyline points={spark} fill="none" stroke="var(--teal)" strokeWidth="1.6" />
               </svg>
             )}
-            {tick?.wallet_error && <p className="note err">⚠ {tick.wallet_error}</p>}
+            {tick?.wallet_error && <p className="note err"><Icon name="alert" /> {tick.wallet_error}</p>}
           </div>
         </Panel>
 
@@ -144,9 +145,9 @@ export function Judge() {
               <text x="70" y="86" textAnchor="middle" fill="var(--fog)" fontSize="9">live calls</text>
             </svg>
             <div className="stack" style={{ gap: 4 }}>
-              <span className="note">🔎 Search {L?.search ?? 0}{L?.avg_latency_ms?.search ? ` · avg ${(L.avg_latency_ms.search / 1000).toFixed(1)}s` : ""}</span>
-              <span className="note">📄 Fetch {L?.fetch ?? 0}{L?.avg_latency_ms?.fetch ? ` · avg ${(L.avg_latency_ms.fetch / 1000).toFixed(1)}s` : ""}</span>
-              <span className="note">🐟 Agent {L?.agent ?? 0} · 🖥 Browser {L?.browser ?? 0} · 🔔 Monitor {L?.monitor ?? 0}</span>
+              <span className="note"><Icon name="search" /> Search {L?.search ?? 0}{L?.avg_latency_ms?.search ? ` · avg ${(L.avg_latency_ms.search / 1000).toFixed(1)}s` : ""}</span>
+              <span className="note"><Icon name="file" /> Fetch {L?.fetch ?? 0}{L?.avg_latency_ms?.fetch ? ` · avg ${(L.avg_latency_ms.fetch / 1000).toFixed(1)}s` : ""}</span>
+              <span className="note"><Icon name="bot" /> Agent {L?.agent ?? 0} · <Icon name="monitor" /> Browser {L?.browser ?? 0} · <Icon name="bell" /> Monitor {L?.monitor ?? 0}</span>
               <span className="note">cache hits <b>0</b> (no cache) · errors {L?.errors ?? 0}</span>
               <span className="note">reports {tick?.reports ?? 0} · ≈{tick?.hours_saved ?? 0} h saved</span>
             </div>
@@ -161,8 +162,8 @@ export function Judge() {
           )}
         </div>
 
-        <Panel title="Live browser preview" sub={tick?.live_run ? `▶ ${tick.live_run.status} · ${tick.live_run.steps} steps · ${tick.live_run.goal.slice(0, 90)}…` : "Shows the newest running Agent run automatically (streaming_url). Start one from Sahayak (✅ consent) or Live Portals (map live)."} className="judge-wide"
-          right={preview && <><a className="btn sm" href={preview} target="_blank" rel="noreferrer">↗ open</a><button className="btn sm" onClick={() => setPreview(null)}>✕</button></>}>
+        <Panel title="Live browser preview" sub={tick?.live_run ? `Live · ${tick.live_run.status} · ${tick.live_run.steps} steps · ${tick.live_run.goal.slice(0, 90)}…` : "Shows the newest running Agent run automatically (streaming_url). Start one from Sahayak (consent) or Live Portals (map live)."} className="judge-wide"
+          right={preview && <><a className="btn sm" href={preview} target="_blank" rel="noreferrer">↗ open</a><button className="btn sm" onClick={() => setPreview(null)}><Icon name="x" /></button></>}>
           {preview ? (
             <iframe className="judge-frame" src={preview} title="TinyFish agent live browser" sandbox="allow-scripts allow-same-origin" />
           ) : (
@@ -191,8 +192,8 @@ export function Judge() {
                 <h4>{r.label}</h4>
                 <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                   <span className="chip">{r.ms === null ? "…" : `${(r.ms / 1000).toFixed(1)} s`}</span>
-                  <span className="chip live">🔎 {r.search} live search</span>
-                  <span className="chip live">📄 {r.fetchOk}/{r.fetchUrls} fetched live</span>
+                  <span className="chip live"><Icon name="search" /> {r.search} live search</span>
+                  <span className="chip live"><Icon name="file" /> {r.fetchOk}/{r.fetchUrls} fetched live</span>
                   <span className="chip">
                     wallet Δ {r.walletBefore !== null && r.walletAfter !== null ? `$${Math.max(0, r.walletBefore - r.walletAfter).toFixed(4)}` : "…"}
                   </span>
@@ -200,11 +201,11 @@ export function Judge() {
                 <ul className="note" style={{ margin: "6px 0 0", paddingLeft: 18 }}>
                   {r.stages.map((s, j) => <li key={j}>{s}</li>)}
                 </ul>
-                {r.error && <p className="note err">⚠ {r.error}</p>}
+                {r.error && <p className="note err"><Icon name="alert" /> {r.error}</p>}
                 {r.report_id && (
                   <div className="row" style={{ marginTop: 6 }}>
-                    <a className="btn sm" href={`/report/${r.report_id}`} target="_blank" rel="noreferrer">🖨 slip</a>
-                    <a className="btn sm" href={`/api/lokmitra/report/${r.report_id}/email?preview=1`} target="_blank" rel="noreferrer">👁 e-mail</a>
+                    <a className="btn sm" href={`/report/${r.report_id}`} target="_blank" rel="noreferrer"><Icon name="printer" /> slip</a>
+                    <a className="btn sm" href={`/api/lokmitra/report/${r.report_id}/email?preview=1`} target="_blank" rel="noreferrer"><Icon name="eye" /> e-mail</a>
                   </div>
                 )}
               </div>
@@ -212,7 +213,7 @@ export function Judge() {
           </div>
           {reh.length === 2 && reh[0].ms && reh[1].ms && (
             <p className="note ok" style={{ marginTop: 8 }}>
-              ✓ Two independent live executions: Farmer #1 made {reh[0].search} Search + {reh[0].fetchUrls} Fetch call(s) in {(reh[0].ms / 1000).toFixed(1)} s; Farmer #2 made {reh[1].search} Search + {reh[1].fetchUrls} Fetch call(s) again in {(reh[1].ms / 1000).toFixed(1)} s. Nothing was cached or reused.
+              <Icon name="check" /> Two independent live executions: Farmer #1 made {reh[0].search} Search + {reh[0].fetchUrls} Fetch call(s) in {(reh[0].ms / 1000).toFixed(1)} s; Farmer #2 made {reh[1].search} Search + {reh[1].fetchUrls} Fetch call(s) again in {(reh[1].ms / 1000).toFixed(1)} s. Nothing was cached or reused.
             </p>
           )}
         </Panel>

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { api, hostOf, ssePost } from "@/lib/client";
 import { Flash, Json, Kpi, PageHead, Panel, useAction, useApi } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 interface DeepLink { url: string; label: string; kind: string }
 interface LivePortal { scheme_id: string; state_code: string; task: string; entry_url: string; deep_links: DeepLink[]; resolved_via: "search" | "registry"; resolved_at: string }
@@ -56,7 +57,7 @@ export function PortalMap() {
           if (t === "STREAMING_URL" && data.streaming_url) up((d) => ({ ...d, streaming_url: String(data.streaming_url) }));
           if (t === "STARTED") up((d) => ({ ...d, run_id: String(data.run_id ?? ""), stages: [...d.stages, `run ${String(data.run_id ?? "").slice(0, 8)} started`] }));
           if (t === "PROGRESS") up((d) => ({ ...d, steps: d.steps + 1, stages: [...d.stages, `▶ ${String(data.purpose ?? "step")}`].slice(-40) }));
-        } else if (event === "result") up((d) => ({ ...d, result: data, stages: [...d.stages, `✓ ${String(data.message ?? "done")}`] }));
+        } else if (event === "result") up((d) => ({ ...d, result: data, stages: [...d.stages, `Done: ${String(data.message ?? "done")}`] }));
         else if (event === "error") up((d) => ({ ...d, error: String(data.error ?? data.message ?? "error") }));
       });
     } catch (e) {
@@ -126,12 +127,12 @@ export function PortalMap() {
           )}
         </div>
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn primary" disabled={!!act.busy} onClick={resolve}>🔎 Resolve live</button>
+          <button className="btn primary" disabled={!!act.busy} onClick={resolve}><Icon name="search" /> Resolve live</button>
           <label className="row note" style={{ gap: 6 }}>
             <input type="checkbox" checked={withFetch} onChange={(e) => setWithFetch(e.target.checked)} /> also Fetch the pages live
           </label>
           <button className="btn paid" disabled={!!disc?.running || !(form.task === "status" || form.task === "land")} onClick={discover} title={scheme?.has_status || form.task === "land" ? "Live TinyFish Agent maps the gated checker right now" : "This scheme has no gated status checker"}>
-            🐟 Map live with Agent
+            <Icon name="bot" /> Map live with Agent
           </button>
         </div>
         <Flash {...act} />
@@ -164,7 +165,7 @@ export function PortalMap() {
                 {latest.pages.map((p) => (
                   <details key={p.url} className="note">
                     <summary style={{ cursor: "pointer" }}>
-                      {p.error ? "✕" : "✓"} {hostOf(p.final_url || p.url)} · {p.error ? p.error : `${p.chars.toLocaleString()} chars`}{p.latency_ms ? ` · ${(p.latency_ms / 1000).toFixed(1)} s` : ""} {p.title ? `· ${p.title}` : ""}
+                      {p.error ? <Icon name="x" /> : <Icon name="check" />} {hostOf(p.final_url || p.url)} · {p.error ? p.error : `${p.chars.toLocaleString()} chars`}{p.latency_ms ? ` · ${(p.latency_ms / 1000).toFixed(1)} s` : ""} {p.title ? `· ${p.title}` : ""}
                     </summary>
                     {p.preview && <pre className="mono" style={{ whiteSpace: "pre-wrap", maxHeight: 180, overflow: "auto", margin: "6px 0 0" }}>{p.preview}</pre>}
                   </details>
@@ -177,13 +178,13 @@ export function PortalMap() {
         {disc && (
           <div className="gate" style={{ marginTop: 12 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <b>{disc.running ? `🐟 Agent mapping the portal live… step ${disc.steps}` : disc.error ? "Live mapping finished with an issue" : "Live mapping finished (not stored)"}</b>
+              <b>{disc.running ? `Agent mapping the portal live… step ${disc.steps}` : disc.error ? "Live mapping finished with an issue" : "Live mapping finished (not stored)"}</b>
               {disc.streaming_url && <a className="btn sm" href={disc.streaming_url} target="_blank" rel="noreferrer noopener">▶ Watch live ↗</a>}
             </div>
             {disc.streaming_url && disc.running && <iframe className="live-frame" src={disc.streaming_url} title="Live TinyFish agent" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
             <div className="stage-list" style={{ maxHeight: 160, overflow: "auto" }}>{disc.stages.map((s, i) => <span key={i}>{s}</span>)}</div>
             {disc.result && <Json value={(disc.result.discovery as Record<string, unknown>) ?? disc.result} />}
-            {disc.error && <p className="note err">⚠ {disc.error}</p>}
+            {disc.error && <p className="note err"><Icon name="alert" /> {disc.error}</p>}
           </div>
         )}
       </Panel>
@@ -191,7 +192,7 @@ export function PortalMap() {
       <Panel title={`Live runs in this tab · ${history.length}`} sub="Kept only in your browser for comparison — the server keeps nothing. Run the same scheme twice to see two independent live resolutions.">
         {sameAsPrev && (
           <p className="note ok">
-            ✓ Same request run twice → two independent live Searches ({(history[1].search.latency_ms / 1000).toFixed(1)} s and {(history[0].search.latency_ms / 1000).toFixed(1)} s). Nothing from the first run was reused.
+            <Icon name="check" /> Same request run twice → two independent live Searches ({(history[1].search.latency_ms / 1000).toFixed(1)} s and {(history[0].search.latency_ms / 1000).toFixed(1)} s). Nothing from the first run was reused.
           </p>
         )}
         {!history.length ? (

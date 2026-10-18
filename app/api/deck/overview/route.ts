@@ -189,16 +189,16 @@ export async function GET() {
     const where = classifyState(r.goal);
     const sec = classifySector(r.goal);
     if (r.status === "COMPLETED")
-      ticker.push({ kind: "success", icon: "⚡", text: `${clip(r.goal, 58)} — done${d ? ` in ${fmtDur(d)}` : ""}${r.num_of_steps ? ` · ${r.num_of_steps} steps` : ""}`, state: where, sector: sec, at: r.finished_at ?? r.created_at });
+      ticker.push({ kind: "success", icon: "zap", text: `${clip(r.goal, 58)} — done${d ? ` in ${fmtDur(d)}` : ""}${r.num_of_steps ? ` · ${r.num_of_steps} steps` : ""}`, state: where, sector: sec, at: r.finished_at ?? r.created_at });
     else if (r.status === "RUNNING" || r.status === "PENDING")
-      ticker.push({ kind: "active", icon: "🐟", text: `Agent swimming: ${clip(r.goal, 60)}`, state: where, sector: sec, at: r.created_at });
-    else if (r.status === "FAILED") ticker.push({ kind: "fail", icon: "⚠", text: `Retry queued: ${clip(r.goal, 60)}`, state: where, sector: sec, at: r.created_at });
+      ticker.push({ kind: "active", icon: "agent", text: `Agent swimming: ${clip(r.goal, 60)}`, state: where, sector: sec, at: r.created_at });
+    else if (r.status === "FAILED") ticker.push({ kind: "fail", icon: "fail", text: `Retry queued: ${clip(r.goal, 60)}`, state: where, sector: sec, at: r.created_at });
   }
   for (const s of searchItems.slice(0, 8))
-    ticker.push({ kind: "free", icon: "🔎", text: `“${clip(s.query, 48)}” → ${s.result_count} results, live`, state: classifyState(s.query), sector: classifySector(s.query), at: s.created_at });
+    ticker.push({ kind: "free", icon: "search", text: `“${clip(s.query, 48)}” → ${s.result_count} results, live`, state: classifyState(s.query), sector: classifySector(s.query), at: s.created_at });
   for (const f of fetchItems.slice(0, 8))
     if (f.status === "completed")
-      ticker.push({ kind: "free", icon: "📄", text: `${clip(f.title || hostOf(f.url), 44)} fetched live${f.latency_ms ? ` in ${Math.round(f.latency_ms)}ms` : ""}${f.language ? ` · ${f.language}` : ""}`, state: classifyState(f.url), sector: classifySector(`${f.url} ${f.title}`), at: f.created_at });
+      ticker.push({ kind: "free", icon: "fetch", text: `${clip(f.title || hostOf(f.url), 44)} fetched live${f.latency_ms ? ` in ${Math.round(f.latency_ms)}ms` : ""}${f.language ? ` · ${f.language}` : ""}`, state: classifyState(f.url), sector: classifySector(`${f.url} ${f.title}`), at: f.created_at });
   ticker.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
 
   const body: DeckOverview = {

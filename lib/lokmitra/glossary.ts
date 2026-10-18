@@ -21,7 +21,7 @@ export type GlossKey =
 type Table = Record<GlossKey, string>;
 
 const en: Table = {
-  title: "Citizen Benefit Report", greeting: "Namaste 🙏 Here is what LokMitra found for you", question: "Question", summary: "Summary",
+  title: "Citizen Benefit Report", greeting: "Namaste Here is what LokMitra found for you", question: "Question", summary: "Summary",
   agriculture: "Agriculture", health: "Health", education: "Education", land: "Land records", labour: "Labour & workers", msme: "MSME & business", welfare: "Social welfare",
   next_steps: "Next steps", also_eligible: "You may also be eligible for", contradictions: "Contradictions to check", sources: "Official sources",
   benefit: "Benefit", eligibility: "Eligibility", deadline: "Last date", helpline: "Helpline", status: "Status", diy: "Do it yourself", documents: "Documents",
@@ -33,7 +33,7 @@ const en: Table = {
 };
 
 const hi: Table = {
-  title: "नागरिक लाभ रिपोर्ट", greeting: "नमस्ते 🙏 लोकमित्र को आपके लिए यह जानकारी मिली", question: "प्रश्न", summary: "सारांश",
+  title: "नागरिक लाभ रिपोर्ट", greeting: "नमस्ते लोकमित्र को आपके लिए यह जानकारी मिली", question: "प्रश्न", summary: "सारांश",
   agriculture: "कृषि", health: "स्वास्थ्य", education: "शिक्षा", land: "भूमि अभिलेख", labour: "श्रमिक", msme: "उद्यम / व्यवसाय", welfare: "समाज कल्याण",
   next_steps: "अगले कदम", also_eligible: "आप इनके लिए भी पात्र हो सकते हैं", contradictions: "जाँचने योग्य विरोधाभास", sources: "आधिकारिक स्रोत",
   benefit: "लाभ", eligibility: "पात्रता", deadline: "अंतिम तिथि", helpline: "हेल्पलाइन", status: "स्थिति", diy: "खुद करें", documents: "दस्तावेज़",
@@ -45,7 +45,7 @@ const hi: Table = {
 };
 
 const mr: Table = {
-  title: "नागरिक लाभ अहवाल", greeting: "नमस्कार 🙏 लोकमित्रला तुमच्यासाठी ही माहिती मिळाली", question: "प्रश्न", summary: "सारांश",
+  title: "नागरिक लाभ अहवाल", greeting: "नमस्कार लोकमित्रला तुमच्यासाठी ही माहिती मिळाली", question: "प्रश्न", summary: "सारांश",
   agriculture: "शेती", health: "आरोग्य", education: "शिक्षण", land: "जमीन अभिलेख", labour: "कामगार", msme: "उद्योग / व्यवसाय", welfare: "समाज कल्याण",
   next_steps: "पुढील पावले", also_eligible: "तुम्ही यासाठीही पात्र असू शकता", contradictions: "तपासण्याजोगे विरोधाभास", sources: "अधिकृत स्रोत",
   benefit: "लाभ", eligibility: "पात्रता", deadline: "शेवटची तारीख", helpline: "हेल्पलाइन", status: "स्थिती", diy: "स्वतः करा", documents: "कागदपत्रे",
@@ -57,7 +57,7 @@ const mr: Table = {
 };
 
 const ta: Table = {
-  title: "குடிமக்கள் நலன் அறிக்கை", greeting: "வணக்கம் 🙏 லோக்மித்ரா உங்களுக்காகக் கண்டறிந்தவை", question: "கேள்வி", summary: "சுருக்கம்",
+  title: "குடிமக்கள் நலன் அறிக்கை", greeting: "வணக்கம் லோக்மித்ரா உங்களுக்காகக் கண்டறிந்தவை", question: "கேள்வி", summary: "சுருக்கம்",
   agriculture: "விவசாயம்", health: "சுகாதாரம்", education: "கல்வி", land: "நில ஆவணங்கள்", labour: "தொழிலாளர்", msme: "சிறு தொழில்", welfare: "சமூக நலன்",
   next_steps: "அடுத்த படிகள்", also_eligible: "நீங்கள் இவற்றுக்கும் தகுதி பெறலாம்", contradictions: "சரிபார்க்க வேண்டிய முரண்பாடுகள்", sources: "அதிகாரப்பூர்வ ஆதாரங்கள்",
   benefit: "பயன்", eligibility: "தகுதி", deadline: "கடைசி தேதி", helpline: "உதவி எண்", status: "நிலை", diy: "நீங்களே செய்யுங்கள்", documents: "ஆவணங்கள்",
@@ -69,7 +69,7 @@ const ta: Table = {
 };
 
 const te: Table = {
-  title: "పౌర ప్రయోజన నివేదిక", greeting: "నమస్తే 🙏 లోక్‌మిత్ర మీ కోసం కనుగొన్నది", question: "ప్రశ్న", summary: "సారాంశం",
+  title: "పౌర ప్రయోజన నివేదిక", greeting: "నమస్తే లోక్‌మిత్ర మీ కోసం కనుగొన్నది", question: "ప్రశ్న", summary: "సారాంశం",
   agriculture: "వ్యవసాయం", health: "ఆరోగ్యం", education: "విద్య", land: "భూ రికార్డులు", labour: "కార్మికులు", msme: "చిన్న పరిశ్రమలు", welfare: "సామాజిక సంక్షేమం",
   next_steps: "తదుపరి చర్యలు", also_eligible: "మీరు వీటికి కూడా అర్హులు కావచ్చు", contradictions: "తనిఖీ చేయాల్సిన వైరుధ్యాలు", sources: "అధికారిక మూలాలు",
   benefit: "ప్రయోజనం", eligibility: "అర్హత", deadline: "చివరి తేదీ", helpline: "హెల్ప్‌లైన్", status: "స్థితి", diy: "మీరే చేయండి", documents: "పత్రాలు",
@@ -81,7 +81,7 @@ const te: Table = {
 };
 
 const bn: Table = {
-  title: "নাগরিক সুবিধা প্রতিবেদন", greeting: "নমস্কার 🙏 লোকমিত্র আপনার জন্য যা পেয়েছে", question: "প্রশ্ন", summary: "সারসংক্ষেপ",
+  title: "নাগরিক সুবিধা প্রতিবেদন", greeting: "নমস্কার লোকমিত্র আপনার জন্য যা পেয়েছে", question: "প্রশ্ন", summary: "সারসংক্ষেপ",
   agriculture: "কৃষি", health: "স্বাস্থ্য", education: "শিক্ষা", land: "ভূমি রেকর্ড", labour: "শ্রমিক", msme: "ক্ষুদ্র ব্যবসা", welfare: "সমাজকল্যাণ",
   next_steps: "পরবর্তী পদক্ষেপ", also_eligible: "আপনি এগুলির জন্যও যোগ্য হতে পারেন", contradictions: "যাচাই করার মতো অসঙ্গতি", sources: "সরকারি সূত্র",
   benefit: "সুবিধা", eligibility: "যোগ্যতা", deadline: "শেষ তারিখ", helpline: "হেল্পলাইন", status: "অবস্থা", diy: "নিজে করুন", documents: "নথিপত্র",
@@ -93,7 +93,7 @@ const bn: Table = {
 };
 
 const gu: Table = {
-  title: "નાગરિક લાભ અહેવાલ", greeting: "નમસ્તે 🙏 લોકમિત્રને તમારા માટે આ માહિતી મળી", question: "પ્રશ્ન", summary: "સારાંશ",
+  title: "નાગરિક લાભ અહેવાલ", greeting: "નમસ્તે લોકમિત્રને તમારા માટે આ માહિતી મળી", question: "પ્રશ્ન", summary: "સારાંશ",
   agriculture: "ખેતી", health: "આરોગ્ય", education: "શિક્ષણ", land: "જમીન રેકર્ડ", labour: "શ્રમિક", msme: "ઉદ્યોગ / વ્યવસાય", welfare: "સમાજ કલ્યાણ",
   next_steps: "આગળનાં પગલાં", also_eligible: "તમે આ માટે પણ પાત્ર હોઈ શકો", contradictions: "તપાસવા જેવા વિરોધાભાસ", sources: "સત્તાવાર સ્ત્રોત",
   benefit: "લાભ", eligibility: "પાત્રતા", deadline: "છેલ્લી તારીખ", helpline: "હેલ્પલાઇન", status: "સ્થિતિ", diy: "જાતે કરો", documents: "દસ્તાવેજો",

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ago, hostOf } from "@/lib/client";
 import { RelayPanel } from "@/components/RelayPanel";
 import { Flash, Kpi, PageHead, Panel, useAction, useApi } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 interface Sess { id: string; kind: string; user_id: string | null; expires_at: string; created_at: string; data: Record<string, unknown> }
 interface EProf { profile_id: string; user_id?: string | null; scheme_id?: string; state_code?: string; purpose: string; expires_at: string; deleted_at?: string | null; created_at: string }
@@ -79,12 +80,12 @@ export function Sessions() {
               <option value="">all kinds</option>
               {Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l} ({count(k)})</option>)}
             </select>
-            <button className="btn sm" onClick={q.reload}>↻</button>
+            <button className="btn sm" onClick={q.reload}><Icon name="refresh" /></button>
           </>
         }
       >
         <Flash {...act} />
-        {q.error && <p className="note err">⚠ {q.error}</p>}
+        {q.error && <p className="note err"><Icon name="alert" /> {q.error}</p>}
         {!rows.length ? (
           <div className="empty">{q.loading ? "loading…" : "No active sessions."}</div>
         ) : (
@@ -153,7 +154,7 @@ export function Sessions() {
         </Panel>
 
         <Panel title="TinyFish Browser Context Profiles" sub="GET /v1/profiles. Operator-owned profiles (e.g. a CSC’s own login) persist; lokmitra-otp-* ones are temporary.">
-          {q.data?.tinyfish_profiles?.error && <p className="note err">⚠ {q.data.tinyfish_profiles.error}</p>}
+          {q.data?.tinyfish_profiles?.error && <p className="note err"><Icon name="alert" /> {q.data.tinyfish_profiles.error}</p>}
           <div className="row" style={{ marginBottom: 10 }}>
             <input className="input" style={{ width: 240 }} placeholder="new profile name (operator)" value={newProf} onChange={(e) => setNewProf(e.target.value)} />
             <button className="btn sm" disabled={!newProf.trim() || !!act.busy} onClick={createProfile}>＋ Create</button>
@@ -167,13 +168,13 @@ export function Sessions() {
                 <tbody>
                   {tfp.map((p) => (
                     <tr key={p.id}>
-                      <td>{p.name}{p.is_default ? " ★" : ""} {/^lokmitra-otp-/.test(p.name) && <span className="chip miss">temp</span>}</td>
+                      <td>{p.name}{p.is_default ? <> <Icon name="star" size={11} /></> : null} {/^lokmitra-otp-/.test(p.name) && <span className="chip miss">temp</span>}</td>
                       <td className="mono">{p.id.slice(0, 14)}…</td>
                       <td className="mono">{ago(p.created_at)}</td>
                       <td>
                         <div className="row" style={{ flexWrap: "nowrap" }}>
                           <button className="btn sm" disabled={!!act.busy} onClick={() => setupSession(p.id)} title="Open a setup session to log in once and save cookies">Log in once</button>
-                          <button className="btn sm danger" disabled={!!act.busy} onClick={() => delProfile(p.id)}>✕</button>
+                          <button className="btn sm danger" disabled={!!act.busy} onClick={() => delProfile(p.id)}><Icon name="x" /></button>
                         </div>
                       </td>
                     </tr>

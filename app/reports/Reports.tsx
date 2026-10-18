@@ -4,6 +4,7 @@ import { api, ago } from "@/lib/client";
 import { Flash, Kpi, PageHead, Panel, useAction, useApi, usd } from "@/components/ui";
 import { ReportView } from "@/components/ReportView";
 import type { StructuredReport } from "@/lib/lokmitra/report-shape";
+import { Icon } from "@/components/Icon";
 
 interface Rep { id: string; language: string; query: string; live_calls?: { search?: number; fetch_urls?: number; fetch_ok?: number; agent?: number } | null; elapsed_ms?: number | null; cost_usd: number; created_at: string }
 interface Full extends Rep { structured?: StructuredReport | null; summary_en?: string; summary_local?: string; sources?: string[] }
@@ -43,7 +44,7 @@ export function Reports() {
     <div className="page">
       <PageHead title="Citizen Benefit Reports" sub={<>Every report below came from its <b>own complete live run</b> (fresh Search → Fetch → Agent). Open one to see the structured sector report, the exact Resend e-mail, and the printable CSC slip with QR + verification token.</>}>
         <span className="chip live">● each report = 1 live run</span>
-        {mail && <span className={`chip ${mail.resend_configured ? "hit" : "miss"}`}>{mail.resend_configured ? "Resend ✓" : "Resend not configured · preview only"}</span>}
+        {mail && <span className={`chip ${mail.resend_configured ? "hit" : "miss"}`}>{mail.resend_configured ? "Resend configured" : "Resend not configured · preview only"}</span>}
       </PageHead>
 
       <div className="grid-4">
@@ -55,8 +56,8 @@ export function Reports() {
       <Flash {...act} />
 
       <div className="grid-2" style={{ alignItems: "start" }}>
-        <Panel title={`Reports · ${reports.length}`} right={<button className="btn sm" onClick={list.reload}>↻</button>}>
-          {list.error && <p className="note err">⚠ {list.error}</p>}
+        <Panel title={`Reports · ${reports.length}`} right={<button className="btn sm" onClick={list.reload}><Icon name="refresh" /></button>}>
+          {list.error && <p className="note err"><Icon name="alert" /> {list.error}</p>}
           {!reports.length ? (
             <div className="empty">{list.loading ? "loading…" : <>No reports yet — ask something in <a href="/sahayak">Sahayak</a>.</>}</div>
           ) : (
@@ -96,7 +97,7 @@ export function Reports() {
           ) : (
             <div className="stack">
               <div className="row">
-                <a className="btn sm" href={mail?.link || `/report/${sel.id}`} target="_blank" rel="noreferrer">🖨 CSC slip + QR</a>
+                <a className="btn sm" href={mail?.link || `/report/${sel.id}`} target="_blank" rel="noreferrer"><Icon name="printer" /> CSC slip + QR</a>
                 {mail?.token && <span className="chip" title="HMAC slip token printed on the slip and encoded in its QR">token <b className="mono">{mail.token}</b></span>}
                 {sel.language !== "en" && tab === "report" && <button className="btn sm" onClick={() => setEn((v) => !v)}>{en ? "Local language" : "EN English"}</button>}
               </div>
@@ -112,7 +113,7 @@ export function Reports() {
                   <iframe title="E-mail preview" src={`/api/lokmitra/report/${sel.id}/email?preview=1`} sandbox="" style={{ width: "100%", height: 620, border: "1px solid var(--hair-strong)", borderRadius: 14, background: "#f4f6f8" }} />
                   <div className="row">
                     <input className="input" style={{ flex: 1 }} type="email" placeholder="citizen / CSC operator e-mail" value={to} onChange={(e) => setTo(e.target.value)} />
-                    <button className="btn primary sm" disabled={!!act.busy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)} onClick={send}>📧 Send via Resend</button>
+                    <button className="btn primary sm" disabled={!!act.busy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)} onClick={send}><Icon name="mail" /> Send via Resend</button>
                   </div>
                   {mail && !mail.resend_configured && <div className="note">RESEND_API_KEY is not set — the preview above is exactly what would be sent; sending returns “not configured”.</div>}
                 </>

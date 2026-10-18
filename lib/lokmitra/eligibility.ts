@@ -10,7 +10,8 @@ export type Verdict = "likely" | "check" | "unlikely" | "na";
 export type ReportSector = "agriculture" | "health" | "education" | "land" | "labour" | "msme" | "welfare";
 
 export const SECTOR_ORDER: ReportSector[] = ["agriculture", "health", "education", "land", "labour", "msme", "welfare"];
-export const SECTOR_ICON: Record<ReportSector, string> = { agriculture: "🌾", health: "🏥", education: "🎓", land: "🗺", labour: "🛠", msme: "🏪", welfare: "🤝" };
+/** semantic icon keys (rendered as SVG in the UI by components/Icon; plain text channels omit them) */
+export const SECTOR_ICON: Record<ReportSector, string> = { agriculture: "wheat", health: "hospital", education: "graduation", land: "map", labour: "wrench", msme: "store", welfare: "handshake" };
 
 /** Report sector for a scheme (finer than the deck's 6 sectors: labour + MSME are split out). */
 export function reportSector(schemeId: string): ReportSector {

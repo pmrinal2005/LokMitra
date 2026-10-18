@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { useT, relTime, localizeTexts } from "@/lib/i18n/client";
 import { L, type GlossKey } from "@/lib/lokmitra/glossary";
-import { SECTOR_ICON, type ReportSector } from "@/lib/lokmitra/eligibility";
+import { SectorIcon } from "./Icon";
 import type { SessionSummary } from "@/hooks/useSessionSummary";
+import { Icon } from "./Icon";
 
 const VERDICT_KEY: Record<string, GlossKey> = { likely: "v_likely", check: "v_check", unlikely: "v_unlikely", na: "v_na" };
 
@@ -51,7 +52,7 @@ export function BenefitSnapshot({ data, loading, error }: { data: SessionSummary
         {data && <span className="tag teal">{data.reports} {t("snap_reports")}</span>}
       </header>
 
-      {error && <p className="note err">⚠ {error}</p>}
+      {error && <p className="note err"><Icon name="alert" /> {error}</p>}
       {!snap || !snap.counts.total ? (
         <div className="empty snap-empty">{loading ? "…" : t("snap_empty")}</div>
       ) : (
@@ -72,7 +73,7 @@ export function BenefitSnapshot({ data, loading, error }: { data: SessionSummary
           <ul className="snap-schemes">
             {snap.schemes.slice(0, 6).map((s) => (
               <li key={`${s.scheme_id}:${s.report_id}`} className={`v-${s.verdict}`}>
-                <span className="snap-ic" aria-hidden="true">{SECTOR_ICON[s.sector as ReportSector] ?? "•"}</span>
+                <span className="snap-ic" aria-hidden="true"><SectorIcon id={s.sector} /></span>
                 <span className="snap-name">
                   <b>{s.scheme_name}</b>
                   {s.benefit && <small>{s.benefit}</small>}
@@ -84,7 +85,7 @@ export function BenefitSnapshot({ data, loading, error }: { data: SessionSummary
 
           {snap.deadlines.length > 0 && (
             <div className="snap-block">
-              <h3>⏰ {t("snap_deadlines")}</h3>
+              <h3><Icon name="clock" /> {t("snap_deadlines")}</h3>
               <ul>
                 {snap.deadlines.slice(0, 4).map((d, i) => (
                   <li key={d.scheme_id}>
@@ -96,7 +97,7 @@ export function BenefitSnapshot({ data, loading, error }: { data: SessionSummary
           )}
           {snap.actions.length > 0 && (
             <div className="snap-block">
-              <h3>➜ {t("snap_actions")}</h3>
+              <h3><Icon name="arrow" /> {t("snap_actions")}</h3>
               <ol>
                 {snap.actions.slice(0, 4).map((a, i) => (
                   <li key={a.text}>

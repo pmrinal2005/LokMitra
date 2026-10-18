@@ -16,6 +16,7 @@ import { useSonar } from "@/hooks/useSonar";
 import { useCalm } from "@/hooks/useCalm";
 import { useRole } from "@/hooks/useRole";
 import { useSessionSummary } from "@/hooks/useSessionSummary";
+import { Icon } from "./Icon";
 
 export function CommandDeck() {
   const mission = useMission();
@@ -88,7 +89,7 @@ export function CommandDeck() {
         {/* Wallet Telemetry + Live Execution moved verbatim to Settings → "Usage & Infrastructure" (operator only). */}
         {isOperator && (
           <aside className="panel area-ops ops-pointer" style={{ ["--i" as string]: 4 }} aria-label="Operator shortcuts">
-            <span className="note">🛠 Operator · Wallet Telemetry, Live Execution and the run log live in</span>
+            <span className="note"><Icon name="wrench" /> Operator · Wallet Telemetry, Live Execution and the run log live in</span>
             <a className="btn sm" href="/settings#usage">Settings → Usage &amp; Infrastructure →</a>
           </aside>
         )}

@@ -125,7 +125,14 @@ const SCAN_JS = `(() => {
     if (el.placeholder) return txt(el.placeholder);
     if (el.tagName === 'BUTTON' || el.tagName === 'A') return txt(el.innerText || el.value || el.title);
     if (el.type === 'submit' || el.type === 'button') return txt(el.value);
-    const prev = el.closest('td,div,li,p'); if (prev && prev.previousElementSibling) return txt(prev.previousElementSibling.innerText);
+    // walk up a few ancestors looking for visible caption text placed before the field (tables / div grids / ASP.NET forms)
+    let node = el;
+    for (let d = 0; d < 4 && node; d++) {
+      let sib = node.previousElementSibling;
+      while (sib) { const t = txt(sib.innerText); if (t && t.length < 80) return t; sib = sib.previousElementSibling; }
+      node = node.parentElement;
+    }
+    if (el.title) return txt(el.title);
     return txt(el.name || el.id || el.type);
   };
   const els = [...document.querySelectorAll('input:not([type=hidden]), select, textarea, button, a[role=button], a.btn, input[type=submit]')].filter(vis).slice(0, 60);
@@ -144,7 +151,7 @@ const SCAN_JS = `(() => {
     return f;
   });
   const captcha = !!document.querySelector('img[src*="aptcha" i], img[id*="aptcha" i], img[alt*="aptcha" i], canvas[id*="aptcha" i], iframe[src*="recaptcha"], iframe[src*="hcaptcha"]');
-  return { url: location.href, title: document.title, fields: out, captcha_present: captcha, text_excerpt: String((document.body && document.body.innerText) || '').replace(/\\s+/g, ' ').trim().slice(0, 600) };
+  return { url: location.href, title: document.title, fields: out, captcha_present: captcha || out.some((f) => f.kind === 'captcha'), text_excerpt: String((document.body && document.body.innerText) || '').replace(/\\s+/g, ' ').trim().slice(0, 600) };
 })()`;
 
 export class PageCtl {

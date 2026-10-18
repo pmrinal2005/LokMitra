@@ -422,7 +422,7 @@ End with "### Next steps" (max 4 numbered actions, e.g. complete eKYC, visit CSC
 }
 
 export function templateReport(sections: SectionInput[]): string {
-  const lines: string[] = ["Namaste 🙏 Here is what LokMitra found for you:"];
+  const lines: string[] = ["Namaste Here is what LokMitra found for you:"];
   for (const s of sections) {
     lines.push(`\n### ${s.scheme_name}`);
     if (s.benefit) lines.push(`- Benefit: ${s.benefit}`);

@@ -92,6 +92,35 @@ await check("GET /api/deck/overview (aggregator)", async () => {
   need(errs.length === 0, `upstream errors: ${errs.map((k) => `${k}=${b.errors[k].message}`).join("; ")}`);
   return `${b.nodes.length} reefs · ${b.live.open_web_pct}% live search/fetch · 0% cached · ${b.ticker.length} ticker items`;
 });
+/* ---- LokMitra citizen-journey endpoints (TODO set: i18n, role, session summary, ask SSE) ---- */
+await check("GET /api/lokmitra/role", async () => {
+  const b = await j("/api/lokmitra/role");
+  need(b.role === "citizen" || b.role === "operator", "no role");
+  return `${b.role} · admin_required=${b.admin_required}`;
+});
+await check("GET /api/lokmitra/localize?lang=ta (offline table)", async () => {
+  const b = await j("/api/lokmitra/localize?lang=ta");
+  need(b.strings && b.strings.ask_btn, "no strings");
+  return `${b.via} · ask_btn="${b.strings.ask_btn}"`;
+});
+await check("GET /api/lokmitra/session-summary", async () => {
+  const b = await j("/api/lokmitra/session-summary?user_id=web:verify0001");
+  need(b.snapshot && Array.isArray(b.sources), "bad shape");
+  return `${b.reports} reports · ${b.sources.length} sources`;
+});
+await check("POST /api/lokmitra/ask?stream=1 (live Search + Fetch SSE)", async () => {
+  const r = await fetch(BASE + "/api/lokmitra/ask?stream=1", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ text: "What are e-Shram card benefits?", user_id: "web:verify0001", language: "en" }),
+  });
+  need(r.ok && r.body, `HTTP ${r.status}`);
+  const txt = await r.text();
+  const ev = [...txt.matchAll(/^event: ([a-z_]+)/gm)].map((m) => m[1]);
+  need(ev.includes("search") && ev.includes("fetch") && ev.includes("report"), `events: ${[...new Set(ev)].join(",")}`);
+  return [...new Set(ev)].join(",");
+});
+
 if (PAID) {
   await check("POST /api/tinyfish/agent/run-sse (PAID)", async () => {
     const r = await fetch(BASE + "/api/tinyfish/agent/run-sse", {

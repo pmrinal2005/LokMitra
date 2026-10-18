@@ -1,75 +1,81 @@
-# 🌊 LokMitra × TinyFish — Universal Multilingual Citizen Web Sahayak
+# LokMitra × TinyFish — Universal Multilingual Citizen Web Sahayak
 
-LokMitra helps Indian citizens (farmers, eShram workers, students, the elderly, MSMEs) and CSC operators use fragmented government portals such as PM-KISAN, PMFBY, Ayushman/PM-JAY, e-Shram, NSP, Bhulekh and mandi prices. It answers in 22 Indian languages, over web, Telegram and e-mail.
+LokMitra helps Indian citizens (farmers, e-Shram workers, students, the elderly, MSMEs) and CSC operators use fragmented government portals such as PM-KISAN, PMFBY, Ayushman/PM-JAY, e-Shram, NSP, Bhulekh and mandi prices. It answers in 22 Indian languages over web, Telegram and e-mail, and it runs on all **five TinyFish surfaces**: Search, Fetch, Agent, Browser and Monitor (plus the Wallet).
 
-It runs on all **five TinyFish surfaces**: Search, Fetch, Agent, Browser and Monitor, plus the Wallet.
+> **Execution model:** every query runs **fully live**. No caching anywhere, no budget cap. The wallet is shown to operators for transparency only.
 
-> **Execution model:** every query runs **fully live**. There is **no caching** anywhere (no `portal_map`, no content cache, no stored answers) and **no budget cap**. Asking the same question twice runs two complete, independent pipelines. The wallet counter is shown for transparency only.
-
-- **Stack:** Next.js 15.5 (App Router) · React 19 · TypeScript · Node 22 · Vercel (`bom1`)
+- **Stack:** Next.js 15.5 (App Router) · React 19 · TypeScript · Node 22 · Vercel (`bom1`). No Cloudflare / Hono.
 - **Security:** every TinyFish/Groq/Resend/Telegram key is server-only (`import "server-only"`).
+- **Language layer:** offline UI tables for 7 languages plus Groq (`qwen/qwen3-8b-27b`) for the other 16. **No Bhashini / IndicTrans.** Speech-to-text uses the browser Web Speech API; text-to-speech uses browser SpeechSynthesis.
+- **Icons:** professional inline SVG icon set (`components/Icon.tsx`). No emoji in the UI.
 
 ## Pipeline (per query, every time)
-Intake (web / Telegram / CSC / e-mail)
-→ NLU (Groq, or keyword fallback)
-→ **live Search** (locate the official portal)
-→ **live batched Fetch** (up to 10 URLs)
-→ deterministic extraction + guideline fact-check
-→ consent gate → **live Agent** (`run-sse`, `output_schema`) for gated portals
-→ **synthesis** (structured Citizen Benefit Report)
-→ **localisation** (Groq `qwen/qwen3-8b-27b`, plus an offline glossary for priority languages)
-→ Telegram / e-mail / printable slip with QR.
+Intake (web / Telegram / CSC / e-mail) → NLU (Groq, or keyword fallback) → **live Search** (locate the official portal) → **live batched Fetch** (up to 10 URLs) → deterministic extraction + guideline fact-check → **consent gate** → **live Agent** (`run-sse`, `output_schema`) → **OTP relay** (Browser Context Profile + CDP) when the portal is OTP-gated → synthesis (structured Citizen Benefit Report) → localisation → Telegram / e-mail / printable slip with QR.
 
-## Pages (collapsible sidebar)
-| Group | Page | Purpose |
-|---|---|---|
-| Citizen | `/sahayak` | Voice/text chat. Renders the structured, sector-grouped report (agri, health, edu, land, labour, MSME, welfare) with contradictions, sentinel facts, also-eligible schemes and next steps |
-| | `/csc` | Shared-tablet CSC desk: printable slip, QR, HMAC token, "next citizen" reset |
-| | `/portal-map` | Live Portal Explorer: fresh Search / Fetch / Agent mapping on every press |
-| | `/reports` | Benefit reports, e-mail preview, send via Resend |
-| | `/bot-simulator` | Full Telegram flows without a bot token |
-| Operate | `/` | Mission Deck (map, wallet, live ring, agent terminal, porthole) |
-| | `/live` | Live Browser sessions · `/sentinel` Monitors · `/sessions` OTP relay/profiles |
-| Judge | `/judge` | Live SSE wallet counter, per-surface live-call ring, live browser embed, two-farmer "no cache" rehearsal |
-| | `/impact` · `/runs` · `/settings` | Impact metrics, audit log, integration status |
-| | `/report/:id?t=TOKEN` | Printable slip with "token verified ✓" banner |
-
-## Key API routes
-- `POST /api/lokmitra/ask`: full live pipeline. Returns JSON, or streams SSE with `?stream=1`.
-- `POST /api/lokmitra/confirm`, `/crosscheck`, `/discover`: live Agent runs (SSE).
-- `GET|POST /api/lokmitra/report/:id/email`: `?preview=1` HTML, `?format=json`, POST sends via Resend (returns 503 `NOT_CONFIGURED` without a key).
-- `/api/lokmitra/sentinels` (+ `/starter-pack`, `/:id/run`, `/:id/subscribe`): TinyFish Monitors, deterministic compliance fact-check.
-- `/api/lokmitra/judge/stream`: SSE ticks for the Judge console.
-- `/api/lokmitra/simulator`, `/api/telegram/webhook`, `/api/telegram/setup`.
-- `/api/tinyfish/*`: whitelisted proxies for wallet, agent (`run` / `run-sse` / `run-async` / `run-batch`), runs, search, fetch, browser, monitors, profiles and usage.
-- `/api/cron/maintenance`: nightly privacy housekeeping only. It does no pre-fetching.
+## TODO checklist (this iteration)
+| # | Item | Where | Status |
+|---|---|---|---|
+| 1 | i18n: offline UI strings (7 langs) + localize API + client helpers (`useT`, `speak`, `relTime`, `localizeTexts`) | `lib/i18n/ui-strings.ts`, `lib/i18n/client.ts`, `app/api/lokmitra/localize` | Done |
+| 2 | Role hook + `/api/lokmitra/role`; gates the Settings tab, the nav Wallet pill and the sidebar wallet footer | `hooks/useRole.ts`, `app/api/lokmitra/role`, `components/Sidebar.tsx`, `components/GlassNav.tsx`, `app/settings/Settings.tsx` | Done |
+| 3 | WalletTelemetry + LiveExecution moved verbatim to Settings → **Usage & Infrastructure**, plus run log table | `components/UsageInfrastructure.tsx` (deep link `/settings#usage`, follows `hashchange`) | Done |
+| 4 | Session summary API (benefit_reports → snapshot, sources, deadlines) | `app/api/lokmitra/session-summary`, `hooks/useSessionSummary.ts` | Done |
+| 5 | `useMission` journey events + `useJourney` (ask SSE, consent, agent SSE, OTP relay) | `hooks/useMission.ts`, `hooks/useJourney.ts`, `lib/bus.ts` | Done |
+| 6 | SahayakJourney: 7-stage track, status chip, consent modal, TTS, bubbles, OTP/consent, collapse, idle resume | `components/SahayakJourney.tsx` | Done |
+| 7 | BenefitSnapshot + VerifiedSource cards | `components/BenefitSnapshot.tsx`, `components/VerifiedSource.tsx` | Done |
+| 8 | CommandDeck layout, GlassNav, CSS tokens, responsive (mobile journey header stacks) | `components/CommandDeck.tsx`, `app/globals.css` | Done |
+| 9 | Typecheck + build + vercel.json check | `npm run typecheck`, `npm run build`, `vercel.json` | Pass |
+| 10 | Live tests against the TinyFish key + UI screenshots | see below, `docs/screenshots/` | Pass |
+| 11 | Emoji → professional SVG icons (UI, ticker, terminal, report, e-mail, Telegram) | `components/Icon.tsx` | Done |
 
 ## Live verification (2026-10-18, real TinyFish key)
-| Surface | Check | Result |
+| Surface / flow | Check | Result |
 |---|---|---|
-| Wallet / runs / usage / monitors / profiles | `npm run verify:api` | 13/13 ✓ |
-| Search + Fetch | `/ask` run twice with the same question | 2 independent runs, each with 3 Search calls and 8/9 pages fetched live |
-| Agent | live e-Shram `discover` over SSE | 21 steps, $0.336, `STREAMING_URL`, structured output |
-| Monitor | starter pack (5 watchers) + run-now | baselines captured, compliance fact-check ✓, sentinel facts appear in the report |
-| Browser | session create + terminate | ✓ |
-| Email / slip / Telegram simulator / Judge SSE | — | ✓ (Resend returns 503 NOT_CONFIGURED without a key) |
+| Wallet, runs, batch, usage ×3, monitors, profiles, Search, Fetch, deck aggregator, role, localize, session-summary, ask SSE | `npm run verify:api` | **17/17 pass** |
+| Agent `run-sse` (paid) | `DECK_VERIFY_PAID=1 npm run verify:api` | STARTED · STREAMING_URL · PROGRESS · COMPLETE |
+| Agent `run-async` + `GET /runs/:id` polling | myscheme.gov.in heading | COMPLETED in 3 steps: `{"heading":"Find schemes based on categories"}` |
+| `/api/lokmitra/ask` (SSE) | "Nashik farmer, PM-KISAN status + wheat price" | ~8 s: 2 live Searches, live Fetch of Agmarknet / mandi pages (real Nashik APMC prices), consent gate for PM-KISAN |
+| `/api/lokmitra/confirm`: live Agent on pmkisan.gov.in | test reg. no. | 9 steps · $0.144 · live `streaming_url` · detected the real OTP wall → `needs_otp: true` + `retry_confirm_id` |
+| OTP relay | `POST /relay` → `/act` (fill) → `/save` → `DELETE` | profile + setup-session created, live page screenshot (reg. no. box, CAPTCHA, "Get OTP"), field filled over CDP, profile saved (2 cookies, `pmkisan.gov.in`), profile deleted |
+| Monitor | starter pack (5 sentinels) + run-now | 5 TinyFish monitors created; compliance run processed ("no change") |
+| Browser | create + terminate | session `tf-…` with `cdp_url`; terminated |
+| UI (Playwright) | full journey: ask → consent modal → report → snapshot/sources → language switch → citizen gate → operator → Usage tab → mobile | zero console errors; see `docs/screenshots/01…11` |
+
+Fixes made during live testing: the OTP-relay field labeller now walks preceding siblings and ancestors, so ASP.NET/NIC forms get proper labels. Single unlabeled identifier boxes are auto-filled. A CAPTCHA input now sets `captcha_present`. The `/settings#usage` deep link now switches tabs on a same-page hash change.
+
+## Pages
+| Group | Page | Purpose |
+|---|---|---|
+| Citizen | `/` | Command Deck: **Sahayak Journey** (hero), **Benefit Snapshot**, **Verified Sources**, Living Network map, Agent reasoning, Browser porthole, Sectors, Impact ticker |
+| | `/sahayak` · `/csc` | Full chat (CSC mode with printable slip + QR, "next citizen" reset) |
+| | `/portal-map` · `/reports` · `/bot-simulator` | Live portal explorer, benefit reports + Resend, Telegram flows without a token |
+| Operate | `/live` · `/sentinel` · `/sessions` | Live Browser sessions, Monitors, OTP relay/profiles |
+| Judge | `/judge` · `/impact` · `/runs` | Live SSE wallet counter, live browser embed, two-farmer rehearsal, impact, audit log |
+| Operator only | `/settings` (Integrations · **Usage & Infrastructure**) | Wallet Telemetry, Live Execution ring, run log, integrations, endpoint probe |
+
+## Key API routes
+- `POST /api/lokmitra/ask` (`?stream=1` for SSE) · `POST /api/lokmitra/confirm` (Agent SSE) · `/crosscheck` · `/discover`
+- `POST /api/lokmitra/relay` → `/relay/:id/act` → `/relay/:id/save` → `DELETE /relay/:id` (OTP relay)
+- `GET /api/lokmitra/role` / `POST {view}` · `GET|POST /api/lokmitra/localize` · `GET /api/lokmitra/session-summary?user_id=`
+- `/api/lokmitra/sentinels` (+ `/starter-pack`, `/:id/run`, `/:id/subscribe`) · `/api/lokmitra/judge/stream`
+- `/api/tinyfish/*`: whitelisted proxies (wallet, agent `run`/`run-sse`/`run-async`/`run-batch`, runs, search, fetch, browser, monitors, profiles, usage)
+- `/api/telegram/webhook`, `/api/telegram/setup`, `/api/cron/maintenance` (privacy housekeeping only)
 
 ## Run locally
 ```bash
 cp .env.example .env.local   # set TINYFISH_API_KEY
 npm ci && npm run build && npm start      # http://localhost:3000
-npm run verify:api                        # free checks; DECK_VERIFY_PAID=1 adds a paid Agent run
+npm run verify:api                        # 17 live checks; DECK_VERIFY_PAID=1 adds a paid Agent SSE run
 ```
 
 ## Deploy to Vercel (manual)
-1. Import the repo. The framework is detected as Next.js and pinned in `vercel.json` (`npm ci`, `npm run build`, region `bom1`, cron `/api/cron/maintenance`, `no-store` on `/api/*`).
-2. Add the env vars from `.env.example`. Only `TINYFISH_API_KEY` is required. Also set `CRON_SECRET`, `ADMIN_TOKEN` and `PUBLIC_BASE_URL`.
-3. Long routes set `export const maxDuration` in code (up to 300s; needs Fluid Compute on the Hobby plan).
+1. Import the repo. `vercel.json` pins framework `nextjs`, `npm ci`, `npm run build`, region `bom1`, a daily cron for `/api/cron/maintenance` (GET), and `no-store` on `/api/*`. Node 22 comes from `engines` and `.nvmrc`.
+2. Add env vars from `.env.example`. Only `TINYFISH_API_KEY` is required. Recommended: `ADMIN_TOKEN` (turns on operator gating), `CRON_SECRET`, `SESSION_SECRET`, `PUBLIC_BASE_URL`, `GROQ_API_KEY`, `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+3. Long routes set `export const maxDuration` (≤ 300 s, the Vercel Fluid Compute limit).
 
 ## Optional integrations
-Telegram, Groq, Resend and Supabase are optional. Without them the app falls back to keyword intent detection and the offline glossary, keeps data in an in-memory store, and reports "not configured". See `/settings`.
+Telegram, Groq, Resend and Supabase are optional. Without Groq, the app uses keyword intent detection and the offline glossary/UI tables (7 languages; the other 16 fall back by script). Without Supabase it uses an in-memory store, which resets per instance. `/settings` shows the status of each.
 
 ## Data model (Supabase, optional)
-`users`, `benefit_reports`, `runs_log`, `monitor_subscriptions`/sentinels, `user_sessions`, relay tables. **No cache tables:** migration `0004_remove_caching.sql` drops `portal_map` and `content_cache`.
+`users`, `benefit_reports`, `runs_log`, `monitor_subscriptions`/`sentinels`, `monitor_events`, `user_sessions`, `ephemeral_profiles`. No cache tables (`0004_remove_caching.sql`).
 
-**Status:** ✅ typecheck · ✅ `next build` · ✅ live-tested · Last updated 2026-10-18
+**Status:** typecheck pass · `next build` pass · live-tested against TinyFish · Last updated 2026-10-18

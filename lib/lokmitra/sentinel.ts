@@ -240,7 +240,7 @@ export async function processMonitorResult(payload: PagePayload, source: "webhoo
         purpose: "sentinel_diff",
       });
       if (x?.what_changed) summary = clip(x.what_changed, 400);
-      if (x?.contradiction) summary += ` ⚠ Guideline/portal contradiction: ${clip(x.contradiction, 240)}`;
+      if (x?.contradiction) summary += ` Guideline/portal contradiction: ${clip(x.contradiction, 240)}`;
       if (x?.deadline) summary += ` · Deadline: ${x.deadline}`;
     }
   }
@@ -250,7 +250,7 @@ export async function processMonitorResult(payload: PagePayload, source: "webhoo
     facts = factCheck(s.scheme_id, text, s.target.startsWith("http") ? s.target : null).filter((f) => f.status !== "not_stated");
     const bad = facts.filter((f) => f.status === "contradiction");
     if (bad.length && (s.kind === "compliance" || changed)) {
-      const note = `⚠ Guideline/portal contradiction (deterministic): ${bad.map((f) => `${f.label} shows "${f.found}" vs guideline ${f.canonical}`).join("; ")}`;
+      const note = `Guideline/portal contradiction (deterministic): ${bad.map((f) => `${f.label} shows "${f.found}" vs guideline ${f.canonical}`).join("; ")}`;
       if (!summary.includes("deterministic")) summary = changed ? `${summary} ${note}` : note;
       if (s.kind === "compliance" && !changed) changed = !(await lastFactsHadSame(monitorId, bad));
     }
@@ -266,7 +266,7 @@ export async function processMonitorResult(payload: PagePayload, source: "webhoo
 }
 
 function factSummary(f: FactResult[]) {
-  return f.map((x) => `${x.label} ${x.status === "confirmed" ? "✓" : "⚠"}`).join(" · ");
+  return f.map((x) => `${x.label} ${x.status === "confirmed" ? "(confirmed)" : "(mismatch)"}`).join(" · ");
 }
 
 /** Avoid re-alerting the same standing contradiction on every scheduled run. */
@@ -318,7 +318,7 @@ export async function registerStarterPack(state: string, opts: { user_id?: strin
 async function fanOut(s: SentinelRow, summary: string): Promise<number> {
   const subs = await subscriptionsFor(s.monitor_id);
   const scheme = schemeById(s.scheme_id);
-  const title = `🔔 ${scheme?.name ?? s.scheme_id} (${stateByCode(s.state_code).name}) — ${s.kind} update`;
+  const title = `${scheme?.name ?? s.scheme_id} (${stateByCode(s.state_code).name}) — ${s.kind} update`;
   const msgEn = `${title}\n\n${summary}\n\nSource: ${s.target.startsWith("http") ? s.target : scheme?.entry ?? ""}`;
   const byLang = new Map<string, string>();
   let n = 0;

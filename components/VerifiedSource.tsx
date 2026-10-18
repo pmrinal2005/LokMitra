@@ -1,6 +1,7 @@
 "use client";
 import { useT, relTime } from "@/lib/i18n/client";
 import type { SessionSummary } from "@/hooks/useSessionSummary";
+import { Icon } from "./Icon";
 
 /**
  * Verified Sources — every page that was READ LIVE (TinyFish Fetch / Agent) to answer this citizen,
@@ -20,7 +21,7 @@ export function VerifiedSource({ data, loading }: { data: SessionSummary | null;
           </h2>
           <div className="panel-sub">{t("src_sub")}</div>
         </div>
-        {list.length > 0 && <span className="tag jade">✓ {official}/{list.length}</span>}
+        {list.length > 0 && <span className="tag jade"><Icon name="check" /> {official}/{list.length}</span>}
       </header>
       {!list.length ? (
         <div className="empty">{loading ? "…" : t("src_empty")}</div>
@@ -29,7 +30,7 @@ export function VerifiedSource({ data, loading }: { data: SessionSummary | null;
           {list.slice(0, 8).map((s) => (
             <li key={s.url} className={`src-item ${s.kind}`}>
               <span className={`src-badge ${s.kind}`} title={s.kind === "official" ? t("src_official") : t("src_other")} aria-label={s.kind === "official" ? t("src_official") : t("src_other")}>
-                {s.kind === "official" ? "🏛" : "🌐"}
+                {s.kind === "official" ? <Icon name="landmark" /> : <Icon name="globe" />}
               </span>
               <span className="src-main">
                 <a href={s.url} target="_blank" rel="noreferrer noopener" className="src-host">
@@ -39,7 +40,7 @@ export function VerifiedSource({ data, loading }: { data: SessionSummary | null;
                 {s.schemes.length > 0 && <small className="src-schemes">{s.schemes.slice(0, 3).join(" · ")}</small>}
               </span>
               <span className="src-meta">
-                <span className={`chip ${s.ok ? "hit" : "miss"}`}>{s.ok ? "✓" : "✕"} {t("src_read_live")}</span>
+                <span className={`chip ${s.ok ? "hit" : "miss"}`}>{s.ok ? <Icon name="check" /> : <Icon name="x" />} {t("src_read_live")}</span>
                 <small>{relTime(s.last_read, lang)}{s.latency_ms ? ` · ${(s.latency_ms / 1000).toFixed(1)}s` : ""}</small>
               </span>
             </li>

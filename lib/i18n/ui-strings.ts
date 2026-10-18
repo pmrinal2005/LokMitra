@@ -32,7 +32,7 @@ type Table = Record<UiKey, string>;
 const en: Table = {
   nav_journey: "Sahayak", nav_network: "Network", nav_logs: "Agent Logs", nav_wallet: "Wallet", nav_sectors: "Sectors",
   journey_title: "Your Sahayak Journey", journey_sub: "Ask once — LokMitra finds the official portal, reads it live and explains it in your language.",
-  idle_title: "Namaste 🙏 How can I help you today?", idle_sub: "Ask about PM-KISAN, Ayushman, scholarships, ration, pension, land records or mandi prices — by voice or text.", idle_resumed: "Welcome back — your last report is below.",
+  idle_title: "Namaste How can I help you today?", idle_sub: "Ask about PM-KISAN, Ayushman, scholarships, ration, pension, land records or mandi prices — by voice or text.", idle_resumed: "Welcome back — your last report is below.",
   ask_placeholder: "Type or speak your question…", ask_btn: "Ask", mic_start: "Speak", mic_stop: "Stop", mic_unsupported: "Voice input is not supported in this browser", new_q: "New question", cancel: "Cancel",
   st_listen: "Question", st_understand: "Understanding", st_search: "Finding portal", st_fetch: "Reading pages", st_consent: "Your consent", st_agent: "Live agent", st_report: "Report",
   chip_idle: "Ready", chip_working: "Working", chip_waiting: "Waiting for you", chip_done: "Done", chip_error: "Problem",
@@ -51,7 +51,7 @@ const en: Table = {
 const hi: Table = {
   nav_journey: "सहायक", nav_network: "नेटवर्क", nav_logs: "एजेंट लॉग", nav_wallet: "वॉलेट", nav_sectors: "क्षेत्र",
   journey_title: "आपकी सहायक यात्रा", journey_sub: "एक बार पूछें — लोकमित्र आधिकारिक पोर्टल ढूँढकर उसे अभी पढ़ता है और आपकी भाषा में समझाता है।",
-  idle_title: "नमस्ते 🙏 आज मैं आपकी क्या मदद करूँ?", idle_sub: "PM-KISAN, आयुष्मान, छात्रवृत्ति, राशन, पेंशन, भूमि अभिलेख या मंडी भाव के बारे में बोलकर या लिखकर पूछें।", idle_resumed: "फिर से स्वागत है — आपकी पिछली रिपोर्ट नीचे है।",
+  idle_title: "नमस्ते आज मैं आपकी क्या मदद करूँ?", idle_sub: "PM-KISAN, आयुष्मान, छात्रवृत्ति, राशन, पेंशन, भूमि अभिलेख या मंडी भाव के बारे में बोलकर या लिखकर पूछें।", idle_resumed: "फिर से स्वागत है — आपकी पिछली रिपोर्ट नीचे है।",
   ask_placeholder: "अपना सवाल लिखें या बोलें…", ask_btn: "पूछें", mic_start: "बोलें", mic_stop: "रोकें", mic_unsupported: "इस ब्राउज़र में आवाज़ से इनपुट उपलब्ध नहीं है", new_q: "नया सवाल", cancel: "रद्द करें",
   st_listen: "सवाल", st_understand: "समझना", st_search: "पोर्टल खोजना", st_fetch: "पेज पढ़ना", st_consent: "आपकी सहमति", st_agent: "लाइव एजेंट", st_report: "रिपोर्ट",
   chip_idle: "तैयार", chip_working: "काम जारी", chip_waiting: "आपका इंतज़ार", chip_done: "पूरा", chip_error: "समस्या",
@@ -70,7 +70,7 @@ const hi: Table = {
 const mr: Table = {
   nav_journey: "सहायक", nav_network: "नेटवर्क", nav_logs: "एजंट लॉग", nav_wallet: "वॉलेट", nav_sectors: "क्षेत्रे",
   journey_title: "तुमचा सहायक प्रवास", journey_sub: "एकदाच विचारा — लोकमित्र अधिकृत पोर्टल शोधून ते आत्ता वाचतो आणि तुमच्या भाषेत समजावतो.",
-  idle_title: "नमस्कार 🙏 आज मी तुम्हाला कशी मदत करू?", idle_sub: "PM-KISAN, आयुष्मान, शिष्यवृत्ती, रेशन, पेन्शन, जमीन अभिलेख किंवा बाजारभाव याबद्दल बोलून किंवा लिहून विचारा.", idle_resumed: "पुन्हा स्वागत — तुमचा मागील अहवाल खाली आहे.",
+  idle_title: "नमस्कार आज मी तुम्हाला कशी मदत करू?", idle_sub: "PM-KISAN, आयुष्मान, शिष्यवृत्ती, रेशन, पेन्शन, जमीन अभिलेख किंवा बाजारभाव याबद्दल बोलून किंवा लिहून विचारा.", idle_resumed: "पुन्हा स्वागत — तुमचा मागील अहवाल खाली आहे.",
   ask_placeholder: "तुमचा प्रश्न लिहा किंवा बोला…", ask_btn: "विचारा", mic_start: "बोला", mic_stop: "थांबवा", mic_unsupported: "या ब्राउझरमध्ये आवाज इनपुट उपलब्ध नाही", new_q: "नवीन प्रश्न", cancel: "रद्द करा",
   st_listen: "प्रश्न", st_understand: "समजणे", st_search: "पोर्टल शोधणे", st_fetch: "पाने वाचणे", st_consent: "तुमची संमती", st_agent: "थेट एजंट", st_report: "अहवाल",
   chip_idle: "तयार", chip_working: "काम सुरू", chip_waiting: "तुमची वाट", chip_done: "पूर्ण", chip_error: "समस्या",
@@ -89,7 +89,7 @@ const mr: Table = {
 const ta: Table = {
   nav_journey: "சகாயக்", nav_network: "வலையமைப்பு", nav_logs: "முகவர் பதிவுகள்", nav_wallet: "வாலெட்", nav_sectors: "துறைகள்",
   journey_title: "உங்கள் சகாயக் பயணம்", journey_sub: "ஒருமுறை கேளுங்கள் — லோக்மித்ரா அதிகாரப்பூர்வ தளத்தைக் கண்டறிந்து இப்போதே படித்து உங்கள் மொழியில் விளக்கும்.",
-  idle_title: "வணக்கம் 🙏 இன்று நான் உங்களுக்கு எப்படி உதவலாம்?", idle_sub: "PM-KISAN, ஆயுஷ்மான், உதவித்தொகை, ரேஷன், ஓய்வூதியம், நில ஆவணங்கள் அல்லது சந்தை விலை பற்றி பேசியோ எழுதியோ கேளுங்கள்.", idle_resumed: "மீண்டும் வருக — உங்கள் கடைசி அறிக்கை கீழே உள்ளது.",
+  idle_title: "வணக்கம் இன்று நான் உங்களுக்கு எப்படி உதவலாம்?", idle_sub: "PM-KISAN, ஆயுஷ்மான், உதவித்தொகை, ரேஷன், ஓய்வூதியம், நில ஆவணங்கள் அல்லது சந்தை விலை பற்றி பேசியோ எழுதியோ கேளுங்கள்.", idle_resumed: "மீண்டும் வருக — உங்கள் கடைசி அறிக்கை கீழே உள்ளது.",
   ask_placeholder: "உங்கள் கேள்வியை எழுதுங்கள் அல்லது பேசுங்கள்…", ask_btn: "கேள்", mic_start: "பேசு", mic_stop: "நிறுத்து", mic_unsupported: "இந்த உலாவியில் குரல் உள்ளீடு இல்லை", new_q: "புதிய கேள்வி", cancel: "ரத்து",
   st_listen: "கேள்வி", st_understand: "புரிதல்", st_search: "தளம் தேடல்", st_fetch: "பக்கங்கள் படித்தல்", st_consent: "உங்கள் ஒப்புதல்", st_agent: "நேரடி முகவர்", st_report: "அறிக்கை",
   chip_idle: "தயார்", chip_working: "செயல்படுகிறது", chip_waiting: "உங்களுக்காகக் காத்திருக்கிறது", chip_done: "முடிந்தது", chip_error: "சிக்கல்",
@@ -108,7 +108,7 @@ const ta: Table = {
 const te: Table = {
   nav_journey: "సహాయక్", nav_network: "నెట్‌వర్క్", nav_logs: "ఏజెంట్ లాగ్‌లు", nav_wallet: "వాలెట్", nav_sectors: "రంగాలు",
   journey_title: "మీ సహాయక్ ప్రయాణం", journey_sub: "ఒక్కసారి అడగండి — లోక్‌మిత్ర అధికారిక పోర్టల్‌ను కనుగొని ఇప్పుడే చదివి మీ భాషలో వివరిస్తుంది.",
-  idle_title: "నమస్తే 🙏 ఈరోజు నేను మీకు ఎలా సహాయం చేయగలను?", idle_sub: "PM-KISAN, ఆయుష్మాన్, స్కాలర్‌షిప్, రేషన్, పెన్షన్, భూ రికార్డులు లేదా మార్కెట్ ధరల గురించి మాట్లాడి లేదా రాసి అడగండి.", idle_resumed: "మళ్ళీ స్వాగతం — మీ చివరి నివేదిక క్రింద ఉంది.",
+  idle_title: "నమస్తే ఈరోజు నేను మీకు ఎలా సహాయం చేయగలను?", idle_sub: "PM-KISAN, ఆయుష్మాన్, స్కాలర్‌షిప్, రేషన్, పెన్షన్, భూ రికార్డులు లేదా మార్కెట్ ధరల గురించి మాట్లాడి లేదా రాసి అడగండి.", idle_resumed: "మళ్ళీ స్వాగతం — మీ చివరి నివేదిక క్రింద ఉంది.",
   ask_placeholder: "మీ ప్రశ్నను రాయండి లేదా మాట్లాడండి…", ask_btn: "అడగండి", mic_start: "మాట్లాడండి", mic_stop: "ఆపండి", mic_unsupported: "ఈ బ్రౌజర్‌లో వాయిస్ ఇన్‌పుట్ లేదు", new_q: "కొత్త ప్రశ్న", cancel: "రద్దు",
   st_listen: "ప్రశ్న", st_understand: "అర్థం చేసుకోవడం", st_search: "పోర్టల్ వెతకడం", st_fetch: "పేజీలు చదవడం", st_consent: "మీ అనుమతి", st_agent: "ప్రత్యక్ష ఏజెంట్", st_report: "నివేదిక",
   chip_idle: "సిద్ధం", chip_working: "పని జరుగుతోంది", chip_waiting: "మీ కోసం వేచి ఉంది", chip_done: "పూర్తయింది", chip_error: "సమస్య",
@@ -127,7 +127,7 @@ const te: Table = {
 const bn: Table = {
   nav_journey: "সহায়ক", nav_network: "নেটওয়ার্ক", nav_logs: "এজেন্ট লগ", nav_wallet: "ওয়ালেট", nav_sectors: "ক্ষেত্র",
   journey_title: "আপনার সহায়ক যাত্রা", journey_sub: "একবার জিজ্ঞাসা করুন — লোকমিত্র সরকারি পোর্টাল খুঁজে এখনই পড়ে আপনার ভাষায় বুঝিয়ে দেয়।",
-  idle_title: "নমস্কার 🙏 আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি?", idle_sub: "PM-KISAN, আয়ুষ্মান, বৃত্তি, রেশন, পেনশন, ভূমি রেকর্ড বা মান্ডি দর সম্পর্কে বলে বা লিখে জিজ্ঞাসা করুন।", idle_resumed: "আবার স্বাগতম — আপনার শেষ প্রতিবেদন নিচে আছে।",
+  idle_title: "নমস্কার আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি?", idle_sub: "PM-KISAN, আয়ুষ্মান, বৃত্তি, রেশন, পেনশন, ভূমি রেকর্ড বা মান্ডি দর সম্পর্কে বলে বা লিখে জিজ্ঞাসা করুন।", idle_resumed: "আবার স্বাগতম — আপনার শেষ প্রতিবেদন নিচে আছে।",
   ask_placeholder: "আপনার প্রশ্ন লিখুন বা বলুন…", ask_btn: "জিজ্ঞাসা", mic_start: "বলুন", mic_stop: "থামান", mic_unsupported: "এই ব্রাউজারে ভয়েস ইনপুট নেই", new_q: "নতুন প্রশ্ন", cancel: "বাতিল",
   st_listen: "প্রশ্ন", st_understand: "বোঝা", st_search: "পোর্টাল খোঁজা", st_fetch: "পৃষ্ঠা পড়া", st_consent: "আপনার সম্মতি", st_agent: "লাইভ এজেন্ট", st_report: "প্রতিবেদন",
   chip_idle: "প্রস্তুত", chip_working: "কাজ চলছে", chip_waiting: "আপনার অপেক্ষায়", chip_done: "সম্পন্ন", chip_error: "সমস্যা",
@@ -146,7 +146,7 @@ const bn: Table = {
 const gu: Table = {
   nav_journey: "સહાયક", nav_network: "નેટવર્ક", nav_logs: "એજન્ટ લૉગ", nav_wallet: "વૉલેટ", nav_sectors: "ક્ષેત્રો",
   journey_title: "તમારી સહાયક યાત્રા", journey_sub: "એક વાર પૂછો — લોકમિત્ર સત્તાવાર પોર્ટલ શોધી અત્યારે વાંચે છે અને તમારી ભાષામાં સમજાવે છે.",
-  idle_title: "નમસ્તે 🙏 આજે હું તમારી કેવી રીતે મદદ કરું?", idle_sub: "PM-KISAN, આયુષ્માન, શિષ્યવૃત્તિ, રેશન, પેન્શન, જમીન રેકર્ડ અથવા બજાર ભાવ વિશે બોલીને અથવા લખીને પૂછો.", idle_resumed: "ફરી સ્વાગત — તમારો છેલ્લો અહેવાલ નીચે છે.",
+  idle_title: "નમસ્તે આજે હું તમારી કેવી રીતે મદદ કરું?", idle_sub: "PM-KISAN, આયુષ્માન, શિષ્યવૃત્તિ, રેશન, પેન્શન, જમીન રેકર્ડ અથવા બજાર ભાવ વિશે બોલીને અથવા લખીને પૂછો.", idle_resumed: "ફરી સ્વાગત — તમારો છેલ્લો અહેવાલ નીચે છે.",
   ask_placeholder: "તમારો પ્રશ્ન લખો અથવા બોલો…", ask_btn: "પૂછો", mic_start: "બોલો", mic_stop: "રોકો", mic_unsupported: "આ બ્રાઉઝરમાં અવાજ ઇનપુટ ઉપલબ્ધ નથી", new_q: "નવો પ્રશ્ન", cancel: "રદ કરો",
   st_listen: "પ્રશ્ન", st_understand: "સમજવું", st_search: "પોર્ટલ શોધવું", st_fetch: "પેજ વાંચવા", st_consent: "તમારી સંમતિ", st_agent: "લાઇવ એજન્ટ", st_report: "અહેવાલ",
   chip_idle: "તૈયાર", chip_working: "કામ ચાલુ", chip_waiting: "તમારી રાહ", chip_done: "પૂર્ણ", chip_error: "સમસ્યા",

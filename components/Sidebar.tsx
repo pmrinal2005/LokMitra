@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRole } from "@/hooks/useRole";
 import { useT } from "@/lib/i18n/client";
+import { Icon } from "./Icon";
 
 type Item = { href: string; label: string; icon: React.ReactNode; badge?: { text: string; paid?: boolean }; operatorOnly?: boolean };
 
@@ -146,7 +147,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="sb-foot" aria-live="polite">
           <label className="sb-lang" title={t("lang_label")}>
-            <span aria-hidden="true">🌐</span>
+            <span aria-hidden="true"><Icon name="globe" /></span>
             <select className="sb-lang-select sb-foot-text" value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t("lang_label")}>
               {languages.map((l) => (
                 <option key={l.code} value={l.code}>{l.native}</option>
@@ -155,10 +156,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </label>
           {isOperator ? (
             <>
-              <span title="Live TinyFish wallet balance" className="sb-wallet">
-                ◈ <span className="sb-foot-text">wallet </span>
+              <a href="/settings#usage" title="Live TinyFish wallet balance · open Usage & Infrastructure" className="sb-wallet" style={{ color: "inherit", textDecoration: "none" }}>
+                <Icon name="wallet" /> <span className="sb-foot-text">wallet </span>
                 <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b>
-              </span>
+              </a>
               <span className="sb-foot-text">
                 used <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> · no cap
               </span>
@@ -166,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ) : null}
           {roleReady && (
             <button className="sb-role sb-foot-text" onClick={() => void switchTo(isOperator ? "citizen" : "operator")} title={roleError ?? undefined}>
-              {isOperator ? `👤 ${t("role_switch_citizen")}` : `🛠 ${t("role_switch_operator")}`}
+              {isOperator ? <><Icon name="user" /> {t("role_switch_citizen")}</> : <><Icon name="wrench" /> {t("role_switch_operator")}</>}
             </button>
           )}
           {roleError && <span className="sb-foot-text err-note" style={{ whiteSpace: "normal" }}>{roleError}</span>}

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { api, ago, citizenId, hostOf } from "@/lib/client";
 import { Flash, Json, Kpi, PageHead, Panel, useAction, useApi } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 interface LiveMon { id: string; name?: string | null; type: string; status: string; schedule_cron: string; last_error: string | null; config: Record<string, unknown>; updated_at?: string }
 interface SentinelRow { id?: string; monitor_id: string; monitor_type: "fetch" | "search"; scheme_id: string; scheme_name: string; state_code: string; kind: string; target: string; schedule_cron: string; purpose?: string | null; last_run_at?: string | null; last_change?: Record<string, unknown> | null; created_at?: string; live: LiveMon | null; subscribers: number }
@@ -98,7 +99,7 @@ export function Sentinel() {
           </label>
         </div>
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn paid" disabled={!!act.busy} onClick={create}>🔔 Create sentinel ≈ $0.005</button>
+          <button className="btn paid" disabled={!!act.busy} onClick={create}><Icon name="bell" /> Create sentinel ≈ $0.005</button>
           <input className="input" style={{ width: 240 }} placeholder="alerts e-mail (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
           <span className="note">Subscribe buttons below use this e-mail, otherwise this browser’s citizen id.</span>
         </div>
@@ -106,7 +107,7 @@ export function Sentinel() {
         {q.data?.live_error && <p className="note err">TinyFish monitors: {q.data.live_error}</p>}
       </Panel>
 
-      <Panel title={`Sentinels · ${rows.length}`} right={<button className="btn sm" onClick={q.reload}>↻</button>}>
+      <Panel title={`Sentinels · ${rows.length}`} right={<button className="btn sm" onClick={q.reload}><Icon name="refresh" /></button>}>
         {!rows.length ? (
           <div className="empty">{q.loading ? "loading…" : "No sentinels yet — create one above (e.g. PMFBY Kharif enrolment deadline)."}</div>
         ) : (
@@ -132,9 +133,9 @@ export function Sentinel() {
                       <div className="row" style={{ flexWrap: "nowrap" }}>
                         <button className="btn sm" disabled={!!act.busy} onClick={() => runNow(r.monitor_id)} title="Run now ($0.005)">▶ Run</button>
                         <button className="btn sm" disabled={!!act.busy} onClick={() => sub(r.monitor_id)}>＋ Subscribe</button>
-                        {r.live?.status === "active" ? <button className="btn sm" onClick={() => setStatus(r.monitor_id, "paused")}>⏸</button> : r.live ? <button className="btn sm" onClick={() => setStatus(r.monitor_id, "active")}>⏵</button> : null}
+                        {r.live?.status === "active" ? <button className="btn sm" onClick={() => setStatus(r.monitor_id, "paused")}><Icon name="pause" /></button> : r.live ? <button className="btn sm" onClick={() => setStatus(r.monitor_id, "active")}><Icon name="play" /></button> : null}
                         <button className="btn sm" onClick={() => open(r.monitor_id)}>ⓘ</button>
-                        <button className="btn sm danger" onClick={() => del(r.monitor_id)}>✕</button>
+                        <button className="btn sm danger" onClick={() => del(r.monitor_id)}><Icon name="x" /></button>
                       </div>
                     </td>
                   </tr>
@@ -169,7 +170,7 @@ export function Sentinel() {
                     <span className="mono note" style={{ marginLeft: "auto" }}>{ago(e.created_at)}</span>
                   </h4>
                   {e.summary && <p className="note" style={{ margin: 0 }}>{e.summary}</p>}
-                  {e.notified > 0 && <span className="note ok">📣 {e.notified} citizen(s) alerted</span>}
+                  {e.notified > 0 && <span className="note ok"><Icon name="megaphone" /> {e.notified} citizen(s) alerted</span>}
                 </div>
               ))}
             </div>

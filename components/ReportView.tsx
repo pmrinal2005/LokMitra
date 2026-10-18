@@ -1,6 +1,7 @@
 import type { StructuredReport } from "@/lib/lokmitra/report-shape";
 import { factStatusLabel, keyLabel, reportHost, sectorLabel, sortSectors, statusLabel, verdictLabel } from "@/lib/lokmitra/report-shape";
 import { L } from "@/lib/lokmitra/glossary";
+import { Icon, SectorIcon } from "./Icon";
 
 /**
  * Structured Citizen Benefit Report renderer — sector cards, verdict badges, key facts,
@@ -17,10 +18,10 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
       <p className="rv-headline">{pick(r.headline, r.headline_local)}</p>
       <div className="rv-stats">
         <span className="chip hit">● {r.stats.live_sections ?? r.stats.sections}/{r.stats.sections} {L("live_fetched", l)}</span>
-        <span className="chip">✓ {r.stats.facts_confirmed} {L("confirmed", l)}</span>
-        {r.stats.facts_contradicted > 0 && <span className="chip miss">⚠ {r.stats.facts_contradicted} {L("contradiction", l)}</span>}
+        <span className="chip"><Icon name="check" /> {r.stats.facts_confirmed} {L("confirmed", l)}</span>
+        {r.stats.facts_contradicted > 0 && <span className="chip miss"><Icon name="alert" /> {r.stats.facts_contradicted} {L("contradiction", l)}</span>}
         <span className="chip" title={r.translation.model ?? undefined}>
-          🌐 {r.translation.via === "groq" ? `Groq · ${r.translation.model ?? ""}` : r.translation.via === "glossary" ? `offline glossary (${r.translation.glossary_lang})` : "English"}
+          <Icon name="globe" /> {r.translation.via === "groq" ? `Groq · ${r.translation.model ?? ""}` : r.translation.via === "glossary" ? `offline glossary (${r.translation.glossary_lang})` : "English"}
         </span>
       </div>
 
@@ -28,7 +29,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
         {sortSectors(r.sectors).map((s) => (
           <section key={s.id} className={`rv-sector sec-${s.id}`}>
             <h4 className="rv-sector-h">
-              <span aria-hidden="true">{s.icon}</span> {sectorLabel(s.id, l)}
+              <span aria-hidden="true"><SectorIcon id={s.id} /></span> {sectorLabel(s.id, l)}
             </h4>
             {s.items.map((it) => {
               const reasons = loc && it.reasons_local?.length ? it.reasons_local : it.reasons;
@@ -61,14 +62,14 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
                       <span className="rv-fc-h">{L("fact_check", l)}:</span>
                       {it.fact_check.filter((f) => f.status !== "not_stated").map((f) => (
                         <span key={f.fact_id} className={`fc fc-${f.status}`} title={f.snippet ?? undefined}>
-                          {f.status === "confirmed" ? "✓" : "⚠"} {f.label}: {f.status === "confirmed" ? f.canonical : `${f.found} ≠ ${f.canonical}`}
+                          {f.status === "confirmed" ? <Icon name="check" size={11} /> : <Icon name="alert" size={11} />} {f.label}: {f.status === "confirmed" ? f.canonical : `${f.found} ≠ ${f.canonical}`}
                         </span>
                       ))}
                     </div>
                   )}
                   {it.agent && (
                     <p className="rv-why">
-                      <span>🐟 Agent:</span> {it.agent.status}
+                      <span><Icon name="bot" /> Agent:</span> {it.agent.status}
                       {it.agent.registration_status ? ` · ${it.agent.registration_status}` : ""}
                       {it.agent.blocked_by && it.agent.blocked_by !== "none" ? ` · blocked by ${it.agent.blocked_by}` : ""}
                       {typeof it.agent.cost_usd === "number" ? ` · $${it.agent.cost_usd.toFixed(3)}` : ""}
@@ -96,7 +97,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
       </div>
 
       <section className={`rv-block ${r.contradictions.length ? "warn" : "okay"}`}>
-        <h4>⚠ {L("contradictions", l)}</h4>
+        <h4><Icon name="alert" /> {L("contradictions", l)}</h4>
         {r.contradictions.length ? (
           <ul>
             {r.contradictions.map((c, i) => (
@@ -114,13 +115,13 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
             ))}
           </ul>
         ) : (
-          <p className="note">✓ {L("no_contradictions", l)}</p>
+          <p className="note"><Icon name="check" /> {L("no_contradictions", l)}</p>
         )}
       </section>
 
       {r.sentinel.length > 0 && (
         <section className="rv-block">
-          <h4>🔔 {L("sentinel", l)}</h4>
+          <h4><Icon name="bell" /> {L("sentinel", l)}</h4>
           <ul>
             {r.sentinel.map((s) => (
               <li key={s.monitor_id}>
@@ -129,7 +130,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
                   <span className="rv-fc" style={{ display: "inline-flex", marginLeft: 6 }}>
                     {s.facts.map((f) => (
                       <span key={f.fact_id} className={`fc fc-${f.status}`}>
-                        {f.status === "confirmed" ? "✓" : "⚠"} {f.label} {factStatusLabel(f.status, l)}
+                        {f.status === "confirmed" ? <Icon name="check" size={11} /> : <Icon name="alert" size={11} />} {f.label} {factStatusLabel(f.status, l)}
                       </span>
                     ))}
                   </span>
@@ -142,7 +143,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
 
       {r.also_eligible.length > 0 && (
         <section className="rv-block also">
-          <h4>✨ {L("also_eligible", l)}</h4>
+          <h4><Icon name="sparkle" /> {L("also_eligible", l)}</h4>
           <div className="rv-also">
             {r.also_eligible.map((a) => (
               <a key={a.scheme_id} className="rv-also-card" href={a.entry} target="_blank" rel="noreferrer noopener">
@@ -158,7 +159,7 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
 
       {r.next_steps.length > 0 && (
         <section className="rv-block steps">
-          <h4>➡ {L("next_steps", l)}</h4>
+          <h4><Icon name="arrow" /> {L("next_steps", l)}</h4>
           <ol>
             {r.next_steps.map((n, i) => (
               <li key={i}>

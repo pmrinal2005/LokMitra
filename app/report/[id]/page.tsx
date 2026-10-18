@@ -11,6 +11,7 @@ import { reportHost } from "@/lib/lokmitra/report-shape";
 import { slipToken, verifySlip } from "@/lib/lokmitra/slip";
 import { mdToHtml } from "@/lib/md";
 import { PrintButton } from "./PrintButton";
+import { Icon } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Citizen Benefit Report — LokMitra", robots: { index: false } };
@@ -67,13 +68,13 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             {viewLang === "en" ? "Local language" : "EN English"}
           </Link>
         )}
-        <a className="btn sm" href={`/api/lokmitra/report/${id}/email?preview=1`} target="_blank" rel="noreferrer">👁 Email preview</a>
+        <a className="btn sm" href={`/api/lokmitra/report/${id}/email?preview=1`} target="_blank" rel="noreferrer"><Icon name="eye" /> Email preview</a>
         <PrintButton />
       </div>
       <article className="slip" lang={viewLang}>
         {tokenState !== null && (
           <div className={`slip-verify ${tokenState ? "ok" : "bad"}`} role="status">
-            {tokenState ? `✓ ${L("verified", viewLang)} — ${token}` : "✕ Slip token does not match this report — treat this printout as unverified."}
+            {tokenState ? <><Icon name="shield" /> {L("verified", viewLang)} — {token}</> : <><Icon name="alert" /> Slip token does not match this report — treat this printout as unverified.</>}
           </div>
         )}
         <header style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>

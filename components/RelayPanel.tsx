@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { api, citizenId, hostOf } from "@/lib/client";
+import { Icon } from "./Icon";
 
 /**
  * OTP relay panel — the citizen stays in control of their own login.
@@ -181,11 +182,11 @@ export function RelayPanel({ confirmId, relayId, schemeName, identifiers, onSave
   return (
     <section className="relay" aria-label="OTP relay — secure login">
       <header className="row" style={{ justifyContent: "space-between" }}>
-        <b>🔐 OTP relay · {view?.scheme_name ?? schemeName ?? "official portal"}</b>
+        <b><Icon name="lock" /> OTP relay · {view?.scheme_name ?? schemeName ?? "official portal"}</b>
         <div className="row">
           {view && <span className="chip">{hostOf(snap?.url || view.entry_url)}</span>}
-          {view && <span className={`chip ${left !== null && left < 120 ? "miss" : ""}`} title="Session auto-deletes at TinyFish when this reaches 0">⏱ {mmss}</span>}
-          {view?.saved && <span className="chip hit">✓ login saved{view.cookie_count ? ` · ${view.cookie_count} cookies` : ""}</span>}
+          {view && <span className={`chip ${left !== null && left < 120 ? "miss" : ""}`} title="Session auto-deletes at TinyFish when this reaches 0"><Icon name="timer" /> {mmss}</span>}
+          {view?.saved && <span className="chip hit"><Icon name="check" /> login saved{view.cookie_count ? ` · ${view.cookie_count} cookies` : ""}</span>}
         </div>
       </header>
 
@@ -202,7 +203,7 @@ export function RelayPanel({ confirmId, relayId, schemeName, identifiers, onSave
           <span className="school" aria-hidden="true"><span /><span /><span /></span> {busy}
         </div>
       )}
-      {error && <p className="note err">⚠ {error}</p>}
+      {error && <p className="note err"><Icon name="alert" /> {error}</p>}
 
       {snap && !view?.saved && (
         <div className={compact ? "stack" : "relay-grid"}>
@@ -252,8 +253,8 @@ export function RelayPanel({ confirmId, relayId, schemeName, identifiers, onSave
               ))}
             </div>
             <div className="row">
-              <button className="btn sm" disabled={!!busy} onClick={() => submit()}>⌨ Type into page</button>
-              <button className="btn sm" disabled={!!busy} onClick={() => act([{ op: "scan" }], "Refreshing screenshot…")}>↻ Refresh</button>
+              <button className="btn sm" disabled={!!busy} onClick={() => submit()}><Icon name="keyboard" /> Type into page</button>
+              <button className="btn sm" disabled={!!busy} onClick={() => act([{ op: "scan" }], "Refreshing screenshot…")}><Icon name="refresh" /> Refresh</button>
             </div>
             {shownButtons.length > 0 && (
               <div className="stack" style={{ gap: 6 }}>
@@ -284,7 +285,7 @@ export function RelayPanel({ confirmId, relayId, schemeName, identifiers, onSave
         <span className="note">Your OTP is typed straight into the official page and never stored. The temporary profile is deleted after {mmss}.</span>
         <div className="row">
           {view && !view.saved && (
-            <button className="btn sm paid" disabled={!!busy} onClick={save}>💾 Save login &amp; check status</button>
+            <button className="btn sm paid" disabled={!!busy} onClick={save}><Icon name="save" /> Save login &amp; check status</button>
           )}
           {view?.entry_url && <a className="btn sm" href={view.entry_url} target="_blank" rel="noreferrer noopener">Do it myself ↗</a>}
           <button className="btn sm danger" disabled={busy !== null && !view} onClick={cancel}>{view?.saved ? "Delete session" : "Cancel"}</button>

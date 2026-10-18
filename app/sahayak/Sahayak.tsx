@@ -5,6 +5,7 @@ import { mdToHtml } from "@/lib/md";
 import { RelayPanel } from "@/components/RelayPanel";
 import { ReportView } from "@/components/ReportView";
 import type { StructuredReport } from "@/lib/lokmitra/report-shape";
+import { Icon } from "@/components/Icon";
 
 /** CSC operators share one tablet: a stable "csc:<id>" identity (rate limits + report history per centre). */
 function cscUserId(name: string) {
@@ -163,7 +164,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
           if (type === "STREAMING_URL" && data.streaming_url) up((a) => ({ ...a, streaming_url: String(data.streaming_url) }));
           if (type === "PROGRESS") up((a) => ({ ...a, steps: a.steps + 1, stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
           if (type === "STARTED") up((a) => ({ ...a, stages: [...a.stages, `run ${String(data.run_id ?? "").slice(0, 8)} started`] }));
-        } else if (event === "result") up((a) => ({ ...a, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `✓ ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
+        } else if (event === "result") up((a) => ({ ...a, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `Done: ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
         else if (event === "error") up((a) => ({ ...a, error: String(data.error ?? data.message ?? "error") }));
       });
     } catch (e) {
@@ -188,7 +189,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
           const type = String(data.type ?? "");
           if (type === "STREAMING_URL" && data.streaming_url) up(key, (a) => ({ ...a, streaming_url: String(data.streaming_url) }));
           if (type === "PROGRESS") up(key, (a) => ({ ...a, steps: a.steps + 1, stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
-        } else if (event === "result") up(key, (a) => ({ ...a, running: false, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `✓ ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
+        } else if (event === "result") up(key, (a) => ({ ...a, running: false, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `Done: ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
         else if (event === "error") up(key, (a) => ({ ...a, running: false, error: String(data.error ?? data.message ?? "error") }));
       });
     } catch (e) {
@@ -214,12 +215,12 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
         <section className="panel csc-bar" aria-label="CSC operator">
           <div className="row" style={{ justifyContent: "space-between" }}>
             <div className="row">
-              <b>🏪 CSC / VLE mode</b>
+              <b><Icon name="store" /> CSC / VLE mode</b>
               <input className="input" style={{ width: 220 }} placeholder="CSC ID or operator name" value={cscName} onChange={(e) => { setCscName(e.target.value); try { localStorage.setItem("lm-csc", e.target.value); } catch {} }} aria-label="CSC id" />
               <span className="chip">citizens served this shift: {served}</span>
             </div>
             <div className="row">
-              <button className="btn sm" onClick={() => { setTurns([]); setRuns({}); setIds({}); setRelayFor({}); setText(""); setDistrict(""); }} title="Clear the screen before the next citizen — nothing personal stays on this tablet">🧹 Next citizen</button>
+              <button className="btn sm" onClick={() => { setTurns([]); setRuns({}); setIds({}); setRelayFor({}); setText(""); setDistrict(""); }} title="Clear the screen before the next citizen — nothing personal stays on this tablet"><Icon name="refresh" /> Next citizen</button>
             </div>
           </div>
           <p className="note" style={{ margin: "8px 0 0" }}>The citizen speaks, you type or press the mic. Every answer has a printable slip with QR codes to the official portal. Identifiers are used once and masked in logs; press <b>Next citizen</b> between visitors.</p>
@@ -261,7 +262,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
               <div className="stage-list">
                 {t.stages.map((s, i) => (
                   <span key={i} className={i === t.stages.length - 1 && !t.done ? "on" : ""}>
-                    {i === t.stages.length - 1 && !t.done ? "◌" : "✓"} {s}
+                    {i === t.stages.length - 1 && !t.done ? <Icon name="hourglass" size={11} /> : <Icon name="check" size={11} />} {s}
                   </span>
                 ))}
                 {t.intent && (
@@ -275,20 +276,20 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                 <div className="row" style={{ marginTop: 10 }}>
                   {t.searches.map((c, i) => (
                     <span key={i} className={`chip ${c.error ? "miss" : "live"}`} title={c.error ?? `${c.query ?? ""}${c.top?.length ? `\n${c.top.join("\n")}` : ""}`}>
-                      🔎 live Search · {c.results} result(s){c.latency_ms ? ` · ${(c.latency_ms / 1000).toFixed(1)}s` : ""} · {c.scheme} · {c.task} · {c.state}
+                      <Icon name="search" /> live Search · {c.results} result(s){c.latency_ms ? ` · ${(c.latency_ms / 1000).toFixed(1)}s` : ""} · {c.scheme} · {c.task} · {c.state}
                     </span>
                   ))}
                 </div>
               )}
               {t.pages.length > 0 && (
                 <div className="note" style={{ marginTop: 8 }}>
-                  Live TinyFish Fetch read {t.pages.filter((p) => !p.error && p.chars > 0).length}/{t.pages.length} official page(s) just now: {t.pages.map((p) => `${hostOf(p.url)}${p.error ? " ✕" : ` ✓${p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""}`}`).join(" · ")}
+                  Live TinyFish Fetch read {t.pages.filter((p) => !p.error && p.chars > 0).length}/{t.pages.length} official page(s) just now: {t.pages.map((p) => `${hostOf(p.url)}${p.error ? " (failed)" : ` (ok${p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""})`}`).join(" · ")}
                 </div>
               )}
 
               {t.sections.filter((s) => s.confirm && !runs[s.confirm.confirm_id]).length >= 2 && t.done && (
                 <div className="row gate-bar" style={{ marginTop: 12 }}>
-                  <span className="note">🔀 {t.sections.filter((s) => s.confirm).length} personal checks found — run them side by side (parallel cross-verification).</span>
+                  <span className="note"><Icon name="shuffle" /> {t.sections.filter((s) => s.confirm).length} personal checks found — run them side by side (parallel cross-verification).</span>
                   <button className="btn sm paid" onClick={() => crossCheck(t)}>
                     Run all live in parallel
                   </button>
@@ -301,7 +302,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                 return (
                   <div key={c.confirm_id} className="gate" style={{ marginTop: 12 }}>
                     <div className="row" style={{ justifyContent: "space-between" }}>
-                      <b>🔐 {c.scheme_name} — personal {c.task} check</b>
+                      <b><Icon name="lock" /> {c.scheme_name} — personal {c.task} check</b>
                       <span className="chip live" title="Informational estimate only — there is no step limit or budget cap">● live agent · typically ~{c.est_steps} steps ≈ {fmtUsd(c.est_cost_usd)}</span>
                     </div>
                     <span className="note">
@@ -310,14 +311,14 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     <div className="field-grid">
                       {c.fields.map((f) => (
                         <label key={f.key}>
-                          <span className="label">{f.label}{f.provided ? " ✓" : ""}</span>
+                          <span className="label">{f.label}{f.provided ? <> <Icon name="check" size={11} /></> : null}</span>
                           <input className="input" placeholder={f.provided ? "already provided" : f.label} value={v[f.key] ?? ""} onChange={(e) => setIds((m) => ({ ...m, [c.confirm_id]: { ...(m[c.confirm_id] ?? {}), [f.key]: e.target.value } }))} autoComplete="off" />
                         </label>
                       ))}
                     </div>
                     <div className="row">
                       <button className="btn paid" disabled={!!run?.running || (!!run && !run.retry_confirm_id && !run.error)} onClick={() => runConfirm(c, t.report?.report_id, undefined, run?.retry_confirm_id ?? undefined)}>
-                        {run?.retry_confirm_id ? "↻ Retry agent" : "✅ Confirm & run agent"}
+                        {run?.retry_confirm_id ? <><Icon name="refresh" /> Retry agent</> : <><Icon name="check-circle" /> Confirm &amp; run agent</>}
                       </button>
                       <a className="btn sm" href={c.entry_url} target="_blank" rel="noreferrer noopener">Do it myself ↗</a>
                     </div>
@@ -337,7 +338,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     )}
                     {!run && c.requires_otp && relayFor[c.confirm_id] === undefined && (
                       <button className="btn sm" style={{ alignSelf: "flex-start" }} onClick={() => setRelayFor((m) => ({ ...m, [c.confirm_id]: c.confirm_id }))} title="Log in first with your own OTP, then the agent reuses that session">
-                        🔐 This portal needs OTP — log in first (OTP relay)
+                        <Icon name="lock" /> This portal needs OTP — log in first (OTP relay)
                       </button>
                     )}
                   </div>
@@ -350,7 +351,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     <div className="row" style={{ marginBottom: 8 }} role="tablist" aria-label="Report view">
                       {(["cards", "text", ...(t.report.language !== "en" ? ["en"] : [])] as ("cards" | "text" | "en")[]).map((v) => (
                         <button key={v} role="tab" aria-selected={(view[t.id] ?? "cards") === v} className={`btn sm ${(view[t.id] ?? "cards") === v ? "primary" : ""}`} onClick={() => setView((m) => ({ ...m, [t.id]: v }))}>
-                          {v === "cards" ? "▦ Structured report" : v === "text" ? "☰ Plain text" : "EN English"}
+                          {v === "cards" ? <><Icon name="grid" /> Structured report</> : v === "text" ? <><Icon name="list" /> Plain text</> : <><Icon name="globe" /> English</>}
                         </button>
                       ))}
                     </div>
@@ -375,10 +376,10 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     </span>
                     {!t.report.follow_up && (
                       <div className="row">
-                        <a className="btn sm" href={`/report/${t.report.report_id}`} target="_blank" rel="noreferrer">🖨 Printable slip + QR</a>
-                        <a className="btn sm" href={`/api/lokmitra/report/${t.report.report_id}/email?preview=1`} target="_blank" rel="noreferrer" title="Preview the structured HTML e-mail">👁 Email preview</a>
+                        <a className="btn sm" href={`/report/${t.report.report_id}`} target="_blank" rel="noreferrer"><Icon name="printer" /> Printable slip + QR</a>
+                        <a className="btn sm" href={`/api/lokmitra/report/${t.report.report_id}/email?preview=1`} target="_blank" rel="noreferrer" title="Preview the structured HTML e-mail"><Icon name="eye" /> Email preview</a>
                         <input className="input" style={{ width: 200, padding: "6px 10px" }} placeholder="email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                        <button className="btn sm" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)} onClick={() => emailReport(t.report!.report_id)}>📧 Email</button>
+                        <button className="btn sm" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)} onClick={() => emailReport(t.report!.report_id)}><Icon name="mail" /> Email</button>
                         {mailNote[t.report.report_id] && <span className="note">{mailNote[t.report.report_id]}</span>}
                       </div>
                     )}
@@ -402,7 +403,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                   </div>
                 </details>
               )}
-              {t.error && <p className="note err">⚠ {t.error}</p>}
+              {t.error && <p className="note err"><Icon name="alert" /> {t.error}</p>}
               {!t.done && !t.stages.length && <p className="note">connecting…</p>}
             </div>
           </article>
@@ -446,7 +447,7 @@ function AgentPanel({ run, onOtp }: { run: AgentRun; onOtp?: () => void }) {
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <span className="note">{run.running ? `🐟 TinyFish agent working… step ${run.steps}` : run.error ? "agent finished with an issue" : "agent finished"}</span>
+        <span className="note">{run.running ? `TinyFish agent working… step ${run.steps}` : run.error ? "agent finished with an issue" : "agent finished"}</span>
         {run.streaming_url && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ Watch live ↗</a>}
       </div>
       {run.streaming_url && run.running && <iframe className="live-frame" src={run.streaming_url} title="Live TinyFish agent browser" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
@@ -460,17 +461,17 @@ function AgentPanel({ run, onOtp }: { run: AgentRun; onOtp?: () => void }) {
           {inst.length > 0 && (
             <div className="table-wrap"><table className="tbl"><thead><tr><th>Instalment</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>{inst.map((i, n) => <tr key={n}><td>{i.label}</td><td>{i.date ?? "—"}</td><td>{i.amount ?? "—"}</td><td>{i.status ?? "—"}</td></tr>)}</tbody></table></div>
           )}
-          {Array.isArray(r.pending_actions) && (r.pending_actions as string[]).map((p) => <div key={p} className="note ok">➡ {p}</div>)}
+          {Array.isArray(r.pending_actions) && (r.pending_actions as string[]).map((p) => <div key={p} className="note ok"><Icon name="arrow" /> {p}</div>)}
         </div>
       )}
-      {run.error && <p className="note err">⚠ {run.error}</p>}
+      {run.error && <p className="note err"><Icon name="alert" /> {run.error}</p>}
       {(run.needs_otp || run.needs_captcha) && onOtp && (
         <div className="row">
           <span className="note">{run.needs_otp ? "This portal needs an OTP on your registered mobile." : "A CAPTCHA blocked the agent — you can type it yourself."}</span>
-          <button className="btn sm paid" onClick={onOtp}>🔐 {run.needs_otp ? "Log in with OTP relay" : "Solve CAPTCHA via relay"}</button>
+          <button className="btn sm paid" onClick={onOtp}><Icon name="lock" /> {run.needs_otp ? "Log in with OTP relay" : "Solve CAPTCHA via relay"}</button>
         </div>
       )}
-      {run.relay_id && !run.running && <span className="note ok">✓ used your saved login session — no second paid login</span>}
+      {run.relay_id && !run.running && <span className="note ok"><Icon name="check" /> used your saved login session — no second paid login</span>}
     </div>
   );
 }

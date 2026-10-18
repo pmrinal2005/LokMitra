@@ -3,6 +3,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import type { DeckOverview, LogLine, RecentRun } from "@/lib/deck-types";
 import type { MissionMode, MissionState } from "@/hooks/useMission";
 import { isCalm } from "@/hooks/useCalm";
+import { Icon } from "./Icon";
+const GLYPH_ICON: Record<string, string> = { "▶": "play", "✓": "check", "⚠": "alert", "✕": "x", "◆": "agent" };
 
 const PRESETS: { label: string; hindi: string; mode: MissionMode; url?: string; goal?: string; query?: string }[] = [
   {
@@ -100,7 +102,7 @@ const Line = memo(function Line({ line, animate, onDone }: { line: LogLine; anim
           {time}
         </span>
         <span className="g" aria-hidden="true">
-          {line.glyph}
+          {GLYPH_ICON[line.glyph] ? <Icon name={GLYPH_ICON[line.glyph]} size={11} /> : line.glyph}
         </span>
         <span className="x">
           {line.text.slice(0, shown)}
@@ -307,7 +309,7 @@ export function AgentTerminal({
               <option value="">replay recent run…</option>
               {recent.slice(0, 15).map((r) => (
                 <option key={r.run_id} value={r.run_id}>
-                  {r.status === "COMPLETED" ? "✓" : r.status === "FAILED" ? "✕" : r.status === "RUNNING" ? "▶" : "·"} {r.goal.slice(0, 60)}
+                  {r.status === "COMPLETED" ? <Icon name="check" size={11} /> : r.status === "FAILED" ? <Icon name="x" size={11} /> : r.status === "RUNNING" ? <Icon name="play" size={10} /> : "·"} {r.goal.slice(0, 60)}
                 </option>
               ))}
             </select>

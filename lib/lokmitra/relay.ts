@@ -124,12 +124,19 @@ export async function startRelay(opts: { confirm_id?: string; scheme_id?: string
       if (!(await p.eval<string>("location.href")).startsWith("http")) await p.navigate(entry);
       else await p.waitIdle(8000);
       let s = await p.scan(false);
-      for (const f of s.fields.filter((x) => x.kind === "text")) {
+      const textFields = s.fields.filter((x) => x.kind === "text");
+      for (const f of textFields) {
         const m = LABEL_MAP.find((l) => l.re.test(f.label) && ids[l.key]);
         if (m && !f.value) {
           await p.fill(f.idx, ids[m.key]);
           autofilled.push(f.label);
         }
+      }
+      // single unlabeled identifier box (common on NIC/ASP.NET status pages): use the one identifier the citizen gave
+      const given = Object.values(ids).filter(Boolean);
+      if (!autofilled.length && textFields.length === 1 && !textFields[0].value && given.length === 1) {
+        await p.fill(textFields[0].idx, given[0]);
+        autofilled.push(textFields[0].label || "identifier");
       }
       s = await p.scan(true);
       return s;

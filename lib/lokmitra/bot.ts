@@ -44,9 +44,9 @@ async function setState(chat: string, s: TgState, userId: string) {
 }
 
 const QUICK: InlineKb = [
-  [{ text: "🌾 PM-Kisan status", callback_data: "q:pmkisan" }, { text: "🏥 Ayushman check", callback_data: "q:ayushman" }],
-  [{ text: "📋 Schemes for me", callback_data: "q:schemes" }, { text: "💰 Mandi bhaav", callback_data: "q:mandi" }],
-  [{ text: "🎓 Scholarship", callback_data: "q:nsp" }, { text: "🗺 Land record", callback_data: "q:land" }],
+  [{ text: "PM-Kisan status", callback_data: "q:pmkisan" }, { text: "Ayushman check", callback_data: "q:ayushman" }],
+  [{ text: "Schemes for me", callback_data: "q:schemes" }, { text: "Mandi bhaav", callback_data: "q:mandi" }],
+  [{ text: "Scholarship", callback_data: "q:nsp" }, { text: "Land record", callback_data: "q:land" }],
 ];
 /** Language picker — priority rollout first (2 per row), then the rest of the 22 scheduled languages. */
 function langKeyboard(): InlineKb {
@@ -68,16 +68,16 @@ function stateKeyboard(page = 0): InlineKb {
   const nav: InlineKb[number] = [];
   if (page > 0) nav.push({ text: "◀ Prev", callback_data: `sp:${page - 1}` });
   if ((page + 1) * STATE_PAGE < list.length) nav.push({ text: "More ▶", callback_data: `sp:${page + 1}` });
-  nav.push({ text: "🇮🇳 All-India", callback_data: "st:IN" });
+  nav.push({ text: "All-India", callback_data: "st:IN" });
   rows.push(nav);
   return rows;
 }
-const SETUP_KB: InlineKb = [[{ text: "🌐 Language / भाषा", callback_data: "m:lang" }, { text: "📍 My state / राज्य", callback_data: "m:state" }]];
+const SETUP_KB: InlineKb = [[{ text: "Language / भाषा", callback_data: "m:lang" }, { text: "My state / राज्य", callback_data: "m:state" }]];
 /** Buttons under every Citizen Benefit Report. */
 function reportKb(reportId: string): InlineKb {
-  const kb: InlineKb = [[{ text: "🔔 Deadline alerts", callback_data: "m:alerts" }, { text: "📧 E-mail report", callback_data: `em:${reportId.slice(0, 36)}` }]];
+  const kb: InlineKb = [[{ text: "Deadline alerts", callback_data: "m:alerts" }, { text: "E-mail report", callback_data: `em:${reportId.slice(0, 36)}` }]];
   const base = botBaseUrl();
-  if (base) kb.push([{ text: "🖨 Printable slip + QR", url: `${base}/report/${reportId}` }]);
+  if (base) kb.push([{ text: "Printable slip + QR", url: `${base}/report/${reportId}` }]);
   return kb;
 }
 
@@ -90,7 +90,7 @@ const QUICK_TEXT: Record<string, string> = {
   land: "Mujhe apna land record (khatauni) dekhna hai",
 };
 
-const HELP = `<b>LokMitra 🙏</b> — your free sarkari-yojana helper.
+const HELP = `<b>LokMitra </b> — your free sarkari-yojana helper.
 • Type or send a <b>voice note</b> in any Indian language.
 • Ask about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records, mandi prices…
 • Personal status checks need your consent — I always show the cost first and never submit anything.
@@ -109,9 +109,9 @@ export async function handleUpdate(u: TgUpdate) {
     await tgTyping(chat);
     const f = await tgFile((m.voice ?? m.audio)!.file_id).catch(() => null);
     const tr = f ? await transcribe(f.blob, f.name, user.language) : null;
-    if (!tr) return tgSend(chat, "🎙 Sorry, I could not understand the voice note. Please type your question (voice needs GROQ_API_KEY).");
+    if (!tr) return tgSend(chat, "Sorry, I could not understand the voice note. Please type your question (voice needs GROQ_API_KEY).");
     text = tr;
-    await tgSend(chat, `🎙 <i>${clip(tr, 400).replace(/</g, "&lt;")}</i>`, { html: true });
+    await tgSend(chat, `<i>${clip(tr, 400).replace(/</g, "&lt;")}</i>`, { html: true });
   }
   if (!text) return;
 
@@ -123,7 +123,7 @@ export async function handleUpdate(u: TgUpdate) {
   if (st.mode === "email") {
     await setState(chat, { mode: "idle" }, userId);
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return emailReport(chat, userId, text, st.values?.report_id);
-    if (/^(cancel|no|nahi|x)$/i.test(text)) return tgSend(chat, "👍 OK.");
+    if (/^(cancel|no|nahi|x)$/i.test(text)) return tgSend(chat, "OK.");
   }
 
   return runAsk(chat, userId, text, user.language);
@@ -146,12 +146,12 @@ async function onCommand(chat: string, userId: string, text: string, lang: strin
       return tgSend(chat, HELP, { html: true, keyboard: [...QUICK, ...SETUP_KB] });
     case "/lang": {
       const l = arg ? LANGUAGES.find((x) => x.code === arg.toLowerCase() || x.name.toLowerCase() === arg.toLowerCase()) : null;
-      if (!l) return tgSend(chat, "🌐 Choose your language / अपनी भाषा चुनें:", { keyboard: langKeyboard() });
+      if (!l) return tgSend(chat, "Choose your language / अपनी भाषा चुनें:", { keyboard: langKeyboard() });
       return setLang(chat, userId, l.code);
     }
     case "/state": {
       const s = arg ? STATES.find((x) => x.code === arg.toUpperCase() || x.name.toLowerCase() === arg.toLowerCase()) : null;
-      if (!s) return tgSend(chat, "📍 Choose your state / अपना राज्य चुनें:", { keyboard: stateKeyboard(0) });
+      if (!s) return tgSend(chat, "Choose your state / अपना राज्य चुनें:", { keyboard: stateKeyboard(0) });
       return setStateCode(chat, userId, s.code);
     }
     case "/report":
@@ -161,7 +161,7 @@ async function onCommand(chat: string, userId: string, text: string, lang: strin
         const u = await getUser(userId);
         if (u?.email) return emailReport(chat, userId, u.email);
         await setState(chat, { mode: "email", values: {} }, userId);
-        return tgSend(chat, "📧 Send the e-mail address for your Citizen Benefit Report (or 'cancel').");
+        return tgSend(chat, "Send the e-mail address for your Citizen Benefit Report (or 'cancel').");
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(arg)) return tgSend(chat, "Usage: /email you@example.com — I will e-mail your last Citizen Benefit Report.");
       return emailReport(chat, userId, arg);
@@ -177,18 +177,18 @@ async function onCommand(chat: string, userId: string, text: string, lang: strin
 
 async function runAsk(chat: string, userId: string, text: string, lang: string) {
   await tgTyping(chat);
-  await tgSend(chat, "🔎 LokMitra is checking the official portals live right now…");
+  await tgSend(chat, "LokMitra is checking the official portals live right now…");
   let res: AskResult;
   try {
     res = await ask({ text, user_id: userId, channel: "telegram", language: lang });
   } catch (e) {
-    return tgSend(chat, `⚠ ${(e as Error).message}`);
+    return tgSend(chat, `${(e as Error).message}`);
   }
   const lc = res.live_calls;
   const footer = `\n\n<i>● Live: ${lc.search} TinyFish Search · ${lc.fetch_ok}/${lc.fetch_urls} pages fetched now · ${Math.round(res.elapsed_ms / 100) / 10}s</i>`;
   const kb: InlineKb = [];
-  for (const s of res.sections) if (s.confirm) kb.push([{ text: `✅ Check my ${s.scheme_name} live (TinyFish agent)`, callback_data: `cf:${s.confirm.confirm_id}`.slice(0, 64) }]);
-  if (kb.length) kb.push([{ text: "❌ Not now", callback_data: "cx" }]);
+  for (const s of res.sections) if (s.confirm) kb.push([{ text: `Check my ${s.scheme_name} live (TinyFish agent)`, callback_data: `cf:${s.confirm.confirm_id}`.slice(0, 64) }]);
+  if (kb.length) kb.push([{ text: "Not now", callback_data: "cx" }]);
   kb.push(...reportKb(res.report_id));
   await tgSend(chat, mdToTg(res.summary_local) + footer, { html: true, keyboard: kb });
 }
@@ -199,13 +199,13 @@ async function setLang(chat: string, userId: string, code: string) {
   const l = langByCode(code);
   await upsertUser({ id: userId, channel: "telegram", language: l.code });
   const u = await getUser(userId);
-  return tgSend(chat, `✅ ${l.native} (${l.name}) · ${L("title", l.code)}`, { keyboard: u?.state_code ? QUICK : [[{ text: "📍 Now choose your state", callback_data: "m:state" }]] });
+  return tgSend(chat, `${l.native} (${l.name}) · ${L("title", l.code)}`, { keyboard: u?.state_code ? QUICK : [[{ text: "Now choose your state", callback_data: "m:state" }]] });
 }
 
 async function setStateCode(chat: string, userId: string, code: string) {
   const s = stateByCode(code);
   await upsertUser({ id: userId, channel: "telegram", state_code: s.code === "IN" ? null : s.code });
-  return tgSend(chat, `✅ ${s.name}${s.hindi ? ` (${s.hindi})` : ""}. Answers and alerts will use this state's portals.`, { keyboard: [...QUICK, [{ text: "🔔 Alerts for my state", callback_data: "m:alerts" }]] });
+  return tgSend(chat, `${s.name}${s.hindi ? ` (${s.hindi})` : ""}. Answers and alerts will use this state's portals.`, { keyboard: [...QUICK, [{ text: "Alerts for my state", callback_data: "m:alerts" }]] });
 }
 
 async function lastReport(userId: string) {
@@ -220,27 +220,27 @@ async function sendLastReport(chat: string, userId: string) {
   const st = structuredOf(rep);
   const md = st ? reportToMarkdown(st, lang, { local: lang !== "en", maxSources: 4 }) : String(rep.summary_local ?? rep.summary_en ?? "");
   const when = new Date(String(rep.created_at ?? Date.now())).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  return tgSend(chat, `<b>📄 ${L("title", lang)}</b> · #${String(rep.id).slice(0, 8)} · ${when} IST\n\n${mdToTg(md)}`, { html: true, keyboard: reportKb(String(rep.id)) });
+  return tgSend(chat, `<b>${L("title", lang)}</b> · #${String(rep.id).slice(0, 8)} · ${when} IST\n\n${mdToTg(md)}`, { html: true, keyboard: reportKb(String(rep.id)) });
 }
 
 async function sendAlerts(chat: string, userId: string) {
   const sent = await listSentinels();
   const user = await getUser(userId);
   const mine = sent.filter((s) => s.state_code === "IN" || s.state_code === user?.state_code).slice(0, 8);
-  const kb: InlineKb = mine.map((s) => [{ text: `🔔 ${schemeById(s.scheme_id)?.name ?? s.scheme_id} · ${s.state_code} · ${s.kind}`, callback_data: `sub:${s.monitor_id}`.slice(0, 64) }]);
-  kb.push([{ text: "➕ PMFBY deadline (my state)", callback_data: `mk:pmfby:deadline` }], [{ text: "➕ NSP scholarship deadline", callback_data: `mk:nsp:deadline` }]);
-  if (!user?.state_code) kb.push([{ text: "📍 Set my state first", callback_data: "m:state" }]);
+  const kb: InlineKb = mine.map((s) => [{ text: `${schemeById(s.scheme_id)?.name ?? s.scheme_id} · ${s.state_code} · ${s.kind}`, callback_data: `sub:${s.monitor_id}`.slice(0, 64) }]);
+  kb.push([{ text: "PMFBY deadline (my state)", callback_data: `mk:pmfby:deadline` }], [{ text: "NSP scholarship deadline", callback_data: `mk:nsp:deadline` }]);
+  if (!user?.state_code) kb.push([{ text: "Set my state first", callback_data: "m:state" }]);
   return tgSend(chat, mine.length ? "Choose alerts to subscribe (Monitor checks the official page on a schedule — no Agent cost):" : "No sentinels yet in your state — create one:", { keyboard: kb });
 }
 
 async function emailReport(chat: string, userId: string, to: string, reportId?: string) {
   await upsertUser({ id: userId, channel: "telegram", email: to });
   const rep = reportId ? ((await getReport(reportId)) as Record<string, unknown> | null) : await lastReport(userId);
-  if (!rep) return tgSend(chat, "✅ E-mail saved. Ask a question first, then tap 📧 E-mail report.");
+  if (!rep) return tgSend(chat, "E-mail saved. Ask a question first, then tap E-mail report.");
   const p = await buildReportPayload(rep, { base: botBaseUrl() || undefined });
-  if (!cfg.resendKey()) return tgSend(chat, `⚠ E-mail is not configured on this LokMitra server (RESEND_API_KEY missing).${p.link.startsWith("http") ? `\nOpen / print your report instead: ${p.link}` : ""}`);
+  if (!cfg.resendKey()) return tgSend(chat, `E-mail is not configured on this LokMitra server (RESEND_API_KEY missing).${p.link.startsWith("http") ? `\nOpen / print your report instead: ${p.link}` : ""}`);
   const r = await sendEmail({ to, subject: p.subject, html: p.html, text: p.text });
-  return tgSend(chat, r.id ? `📧 Sent your ${L("title", p.language)} to ${to}` : `⚠ E-mail failed: ${r.error}`);
+  return tgSend(chat, r.id ? `Sent your ${L("title", p.language)} to ${to}` : `E-mail failed: ${r.error}`);
 }
 
 async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
@@ -252,27 +252,27 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
     const user = await getUser(userId);
     return runAsk(chat, userId, QUICK_TEXT[data.slice(2)] ?? "schemes for me", user?.language ?? "hi");
   }
-  if (data === "m:lang") return tgSend(chat, "🌐 Choose your language / अपनी भाषा चुनें:", { keyboard: langKeyboard() });
-  if (data === "m:state") return tgSend(chat, "📍 Choose your state / अपना राज्य चुनें:", { keyboard: stateKeyboard(0) });
+  if (data === "m:lang") return tgSend(chat, "Choose your language / अपनी भाषा चुनें:", { keyboard: langKeyboard() });
+  if (data === "m:state") return tgSend(chat, "Choose your state / अपना राज्य चुनें:", { keyboard: stateKeyboard(0) });
   if (data === "m:alerts") return sendAlerts(chat, userId);
   if (data.startsWith("lg:")) return setLang(chat, userId, data.slice(3));
   if (data.startsWith("st:")) return setStateCode(chat, userId, data.slice(3));
-  if (data.startsWith("sp:")) return tgSend(chat, "📍 Choose your state:", { keyboard: stateKeyboard(Math.max(0, Number(data.slice(3)) || 0)) });
+  if (data.startsWith("sp:")) return tgSend(chat, "Choose your state:", { keyboard: stateKeyboard(Math.max(0, Number(data.slice(3)) || 0)) });
   if (data.startsWith("em:")) {
     const rid = data.slice(3);
     const u = await getUser(userId);
     if (u?.email) return emailReport(chat, userId, u.email, rid);
     await setState(chat, { mode: "email", values: { report_id: rid } }, userId);
-    return tgSend(chat, "📧 Send the e-mail address for this report (or 'cancel').");
+    return tgSend(chat, "Send the e-mail address for this report (or 'cancel').");
   }
   if (data === "cx") {
     await setState(chat, { mode: "idle" }, userId);
-    return tgSend(chat, "👍 OK. No paid check was run.");
+    return tgSend(chat, "OK. No paid check was run.");
   }
   if (data.startsWith("cf:")) return startConfirmed(chat, userId, data.slice(3));
   if (data.startsWith("sub:")) {
-    await subscribe({ monitor_id: data.slice(4), user_id: userId, channel: "telegram" }).catch((e) => tgSend(chat, `⚠ ${(e as Error).message}`));
-    return tgSend(chat, "🔔 Subscribed. I will message you when the official page changes.");
+    await subscribe({ monitor_id: data.slice(4), user_id: userId, channel: "telegram" }).catch((e) => tgSend(chat, `${(e as Error).message}`));
+    return tgSend(chat, "Subscribed. I will message you when the official page changes.");
   }
   if (data.startsWith("mk:")) {
     const [, scheme, kind] = data.split(":");
@@ -280,9 +280,9 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
     try {
       const r = await ensureSentinel({ scheme_id: scheme, state_code: user?.state_code ?? "IN", kind: kind as "deadline" });
       await subscribe({ monitor_id: r.sentinel.monitor_id, user_id: userId, channel: "telegram" });
-      return tgSend(chat, `🔔 ${r.created ? "Sentinel created and" : ""} subscribed: ${schemeById(scheme)?.name} ${kind}.`);
+      return tgSend(chat, `${r.created ? "Sentinel created and" : ""} subscribed: ${schemeById(scheme)?.name} ${kind}.`);
     } catch (e) {
-      return tgSend(chat, `⚠ ${(e as Error).message}`);
+      return tgSend(chat, `${(e as Error).message}`);
     }
   }
   const st = await getState(chat);
@@ -290,7 +290,7 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
   if (data === "rl:x" && st.relay_id) {
     await relayCancel(st.relay_id).catch(() => null);
     await setState(chat, { mode: "idle" }, userId);
-    return tgSend(chat, "🗑 OTP session cancelled and the temporary browser profile deleted.");
+    return tgSend(chat, "OTP session cancelled and the temporary browser profile deleted.");
   }
   if (data === "rl:go") {
     if (!st.retry_confirm_id) return tgSend(chat, "Session expired — please ask again.");
@@ -299,14 +299,14 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
       await setState(chat, { ...st, mode: "relay", relay_id: v.relay_id }, userId);
       return sendRelayView(chat, v);
     } catch (e) {
-      return tgSend(chat, `⚠ Could not open the portal: ${(e as Error).message}`);
+      return tgSend(chat, `Could not open the portal: ${(e as Error).message}`);
     }
   }
 }
 
 async function startConfirmed(chat: string, userId: string, confirmId: string) {
   const c = await sessions.get<{ scheme_id: string; task: "status" | "land"; sealed: string }>(confirmId);
-  if (!c) return tgSend(chat, "⌛ This confirmation expired. Please ask again.");
+  if (!c) return tgSend(chat, "This confirmation expired. Please ask again.");
   const { unseal } = await import("./util");
   const have = unseal<Record<string, string>>(c.data.sealed) ?? {};
   const scheme = schemeById(c.data.scheme_id)!;
@@ -314,7 +314,7 @@ async function startConfirmed(chat: string, userId: string, confirmId: string) {
   const pending = fields.filter((f) => !have[f.key]).map((f) => ({ key: f.key, label: f.label }));
   if (pending.length) {
     await setState(chat, { mode: "collect", confirm_id: confirmId, pending, values: {} }, userId);
-    return tgSend(chat, `🔐 Please send your <b>${pending[0].label}</b>.\n<i>Used once for this check only; masked in logs.</i>`, { html: true });
+    return tgSend(chat, `Please send your <b>${pending[0].label}</b>.\n<i>Used once for this check only; masked in logs.</i>`, { html: true });
   }
   return executeConfirmed(chat, userId, confirmId, {});
 }
@@ -324,14 +324,14 @@ async function onCollect(chat: string, userId: string, st: TgState, text: string
   const values = { ...(st.values ?? {}), [cur.key]: text.slice(0, 80) };
   if (rest.length) {
     await setState(chat, { ...st, pending: rest, values }, userId);
-    return tgSend(chat, `✓ ${cur.label}: ${mask(text)}\nNow send your <b>${rest[0].label}</b>.`, { html: true });
+    return tgSend(chat, `${cur.label}: ${mask(text)}\nNow send your <b>${rest[0].label}</b>.`, { html: true });
   }
   await setState(chat, { mode: "idle" }, userId);
   return executeConfirmed(chat, userId, st.confirm_id!, values);
 }
 
 async function executeConfirmed(chat: string, userId: string, confirmId: string, ids: Record<string, string>, relayId?: string) {
-  await tgSend(chat, "🐟 TinyFish agent is starting on the official portal…");
+  await tgSend(chat, "TinyFish agent is starting on the official portal…");
   let liveSent = false;
   let final: Record<string, unknown> | null = null;
   const gen = runConfirmed({ confirm_id: confirmId, identifiers: ids, relay_id: relayId ?? null });
@@ -341,12 +341,12 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
     const e = n.value as FlowEvent;
     if (e.type === "STREAMING_URL" && !liveSent && typeof e.streaming_url === "string") {
       liveSent = true;
-      await tgSend(chat, "👀 Watch the agent navigate live:", { keyboard: [[{ text: "▶ Live browser", url: e.streaming_url }]] });
+      await tgSend(chat, "Watch the agent navigate live:", { keyboard: [[{ text: "▶ Live browser", url: e.streaming_url }]] });
     }
-    if (e.type === "LM_ERROR") return tgSend(chat, `⚠ ${e.error}\n\nDo it yourself:\n${((e.fallback as string[]) ?? []).map((x) => `• ${x}`).join("\n")}`);
+    if (e.type === "LM_ERROR") return tgSend(chat, `${e.error}\n\nDo it yourself:\n${((e.fallback as string[]) ?? []).map((x) => `• ${x}`).join("\n")}`);
     if (e.type === "LM_RESULT") final = e as Record<string, unknown>;
   }
-  if (!final) return tgSend(chat, "⚠ The agent did not return a result.");
+  if (!final) return tgSend(chat, "The agent did not return a result.");
   const r = (final.result as Record<string, unknown>) ?? {};
   const lines = [`<b>${final.scheme_name}</b> — ${final.status}`];
   for (const k of ["registration_status", "ekyc_status", "land_seeding", "aadhaar_bank_linked", "khasra_or_survey_no", "area", "land_type", "raw_message"]) if (r[k]) lines.push(`• ${k.replace(/_/g, " ")}: ${String(r[k]).replace(/</g, "&lt;")}`);
@@ -355,7 +355,7 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
   const owners = Array.isArray(r.owner_names) ? (r.owner_names as string[]) : [];
   if (owners.length) lines.push(`• owners: ${owners.slice(0, 5).join(", ")}`);
   const pend = Array.isArray(r.pending_actions) ? (r.pending_actions as string[]) : [];
-  pend.slice(0, 4).forEach((p) => lines.push(`➡ ${p}`));
+  pend.slice(0, 4).forEach((p) => lines.push(`${p}`));
   lines.push(`\n<i>${final.steps} steps · $${Number(final.cost_usd).toFixed(3)} · run ${String(final.run_id ?? "").slice(0, 8)}</i>`);
   const user = await getUser(userId);
   let msg = lines.join("\n");
@@ -366,7 +366,7 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
   const kb: InlineKb = [];
   if (final.needs_otp && final.retry_confirm_id) {
     await setState(chat, { mode: "idle", retry_confirm_id: String(final.retry_confirm_id) }, userId);
-    kb.push([{ text: "🔐 Log in with OTP (I relay it)", callback_data: "rl:go" }]);
+    kb.push([{ text: "Log in with OTP (I relay it)", callback_data: "rl:go" }]);
     msg += "\n\nThis portal needs an OTP sent to your registered mobile.";
   }
   await tgSend(chat, msg, { html: true, keyboard: kb.length ? kb : undefined });
@@ -374,10 +374,10 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
 
 async function sendRelayView(chat: string, v: RelayView) {
   const need = v.snapshot?.fields.filter((f) => f.kind === "captcha" || f.kind === "otp").map((f) => f.label) ?? [];
-  const caption = `${v.scheme_name} — official page opened in a secure TinyFish browser.\n${v.autofilled?.length ? `Pre-filled: ${v.autofilled.join(", ")}\n` : ""}${need.length ? `Reply with the ${need.join(" / ")} shown / sent to your phone.` : "Reply with the OTP when you receive it."}\nWhen you see you are logged in, tap ✅.`;
-  const kb: InlineKb = [[{ text: "✅ I'm logged in — save & check", callback_data: "rl:save" }], [{ text: "❌ Cancel", callback_data: "rl:x" }]];
+  const caption = `${v.scheme_name} — official page opened in a secure TinyFish browser.\n${v.autofilled?.length ? `Pre-filled: ${v.autofilled.join(", ")}\n` : ""}${need.length ? `Reply with the ${need.join(" / ")} shown / sent to your phone.` : "Reply with the OTP when you receive it."}\nWhen you see you are logged in, tap .`;
+  const kb: InlineKb = [[{ text: "I'm logged in — save & check", callback_data: "rl:save" }], [{ text: "Cancel", callback_data: "rl:x" }]];
   if (v.snapshot?.screenshot) await tgPhoto(chat, v.snapshot.screenshot, caption, kb).catch(() => tgSend(chat, caption, { keyboard: kb }));
-  else await tgSend(chat, `${caption}${v.error ? `\n⚠ ${v.error}` : ""}`, { keyboard: kb });
+  else await tgSend(chat, `${caption}${v.error ? `\n${v.error}` : ""}`, { keyboard: kb });
 }
 
 /** Citizen typed CAPTCHA / OTP text → fill the first empty matching field and press the primary button. */
@@ -387,24 +387,24 @@ async function onRelayText(chat: string, userId: string, st: TgState, text: stri
     const fields = cur.snapshot?.fields ?? [];
     const target = fields.find((f) => (f.kind === "otp" || f.kind === "captcha") && !f.value) ?? fields.find((f) => f.kind === "text" && !f.value);
     const btn = fields.find((f) => f.kind === "button" && /otp|verify|submit|search|get|login|sign|proceed|continue|data/i.test(f.label));
-    if (!target) return tgSend(chat, "I could not find an empty CAPTCHA/OTP box. Tap ✅ if you are logged in, or ❌ to cancel.");
+    if (!target) return tgSend(chat, "I could not find an empty CAPTCHA/OTP box. Tap if you are logged in, or to cancel.");
     const actions: Parameters<typeof relayAct>[1] = [{ op: "fill", idx: target.idx, value: text.trim() }];
     if (btn) actions.push({ op: "click", idx: btn.idx });
     const v = await relayAct(st.relay_id!, actions);
     return sendRelayView(chat, v);
   } catch (e) {
-    return tgSend(chat, `⚠ ${(e as Error).message}`);
+    return tgSend(chat, `${(e as Error).message}`);
   }
 }
 
 async function relayFinish(chat: string, userId: string, st: TgState) {
   try {
     const saved = await relaySave(st.relay_id!);
-    await tgSend(chat, `🔐 Session saved (${saved.cookie_count} cookies, ${saved.domains.join(", ") || "portal"}). Running your status check without a second login…`);
+    await tgSend(chat, `Session saved (${saved.cookie_count} cookies, ${saved.domains.join(", ") || "portal"}). Running your status check without a second login…`);
     await setState(chat, { mode: "idle" }, userId);
     if (st.retry_confirm_id) return executeConfirmed(chat, userId, st.retry_confirm_id, {}, st.relay_id);
   } catch (e) {
-    return tgSend(chat, `⚠ ${(e as Error).message}`);
+    return tgSend(chat, `${(e as Error).message}`);
   }
 }
 

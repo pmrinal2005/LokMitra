@@ -120,7 +120,7 @@ export function reportToMarkdown(r: StructuredReport, lang: string, opts: { loca
   const head = pick(r.headline, r.headline_local);
   if (head) out.push(head);
   for (const s of sortSectors(r.sectors)) {
-    out.push(`\n### ${s.icon} ${sectorLabel(s.id, lang)}`);
+    out.push(`\n### ${sectorLabel(s.id, lang)}`);
     for (const it of s.items) {
       const badge = it.verdict !== "na" ? ` — ${verdictLabel(it.verdict, lang)}` : "";
       out.push(`**${it.scheme_name}**${badge} · ${statusLabel(it.status, lang)}`);
@@ -128,22 +128,22 @@ export function reportToMarkdown(r: StructuredReport, lang: string, opts: { loca
       const reasons = loc && it.reasons_local?.length ? it.reasons_local : it.reasons;
       if (reasons.length) out.push(`- ${L("why", lang)}: ${reasons.slice(0, 2).join(" ")}`);
       const fc = it.fact_check.filter((f) => f.status !== "not_stated");
-      if (fc.length) out.push(`- ${L("fact_check", lang)}: ${fc.map((f) => `${f.label} ${f.status === "confirmed" ? "✓" : "⚠"} ${factStatusLabel(f.status, lang)}`).join(" · ")}`);
-      if (it.status === "needs_confirmation" && it.confirm) out.push(`- 🔐 ${L("s_needs_confirmation", lang)} (~${it.confirm.est_steps} steps ≈ $${it.confirm.est_cost_usd})`);
+      if (fc.length) out.push(`- ${L("fact_check", lang)}: ${fc.map((f) => `${f.label} ${f.status === "confirmed" ? "(confirmed)" : "(mismatch)"} ${factStatusLabel(f.status, lang)}`).join(" · ")}`);
+      if (it.status === "needs_confirmation" && it.confirm) out.push(`- ${L("s_needs_confirmation", lang)} (~${it.confirm.est_steps} steps ≈ $${it.confirm.est_cost_usd})`);
       const diy = loc && it.diy_local?.length ? it.diy_local : it.diy;
       if (diy.length && (it.status !== "ok" || it.verdict === "check")) out.push(`- ${L("diy", lang)}: ${diy[0]}`);
     }
   }
   if (r.contradictions.length) {
-    out.push(`\n### ⚠ ${L("contradictions", lang)}`);
+    out.push(`\n### ${L("contradictions", lang)}`);
     r.contradictions.slice(0, 5).forEach((c) => out.push(`- ${pick(c.text, c.text_local)}`));
   }
   if (r.sentinel.length) {
-    out.push(`\n### 🔔 ${L("sentinel", lang)}`);
+    out.push(`\n### ${L("sentinel", lang)}`);
     r.sentinel.slice(0, 4).forEach((s) => out.push(`- ${s.scheme_name} (${s.kind}${s.state_code !== "IN" ? ` · ${s.state_code}` : ""}): ${pick(s.summary ?? "—", s.summary_local)}`));
   }
   if (r.also_eligible.length) {
-    out.push(`\n### ✨ ${L("also_eligible", lang)}`);
+    out.push(`\n### ${L("also_eligible", lang)}`);
     r.also_eligible.forEach((a) => out.push(`- **${a.name}** — ${verdictLabel(a.verdict, lang)}: ${a.benefit}`));
   }
   if (r.next_steps.length) {
@@ -161,7 +161,7 @@ export function reportToMarkdown(r: StructuredReport, lang: string, opts: { loca
 export function reportOneLiner(r: StructuredReport, lang: string) {
   const n = r.sectors.reduce((a, s) => a + s.items.length, 0);
   const likely = r.sectors.flatMap((s) => s.items).filter((i) => i.verdict === "likely").map((i) => i.scheme_name);
-  return `${L("title", lang)}: ${n} · ${likely.length ? `${L("v_likely", lang)}: ${likely.join(", ")}` : ""}${r.contradictions.length ? ` · ⚠ ${r.contradictions.length}` : ""}`;
+  return `${L("title", lang)}: ${n} · ${likely.length ? `${L("v_likely", lang)}: ${likely.join(", ")}` : ""}${r.contradictions.length ? ` · contradictions: ${r.contradictions.length}` : ""}`;
 }
 
 export { host as reportHost };

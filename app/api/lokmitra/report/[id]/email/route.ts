@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!r) return err(Object.assign(new Error("report not found (memory store resets on redeploy — configure Supabase)"), { status: 404 }));
   const p = await buildReportPayload(r, { base: cfg.publicBaseUrl() || originOf(req) });
   if (new URL(req.url).searchParams.get("format") === "json") return json({ subject: p.subject, html: p.html, text: p.text, link: p.link, token: p.token, structured: !!p.structured, resend_configured: !!cfg.resendKey() });
-  const banner = `<div style="font:12px system-ui;background:#06243a;color:#2EF2C3;padding:8px 14px">E-mail preview · subject: <b style="color:#fff">${p.subject.replace(/</g, "&lt;")}</b> · Resend ${cfg.resendKey() ? "configured ✓" : "NOT configured (preview only)"}</div>`;
+  const banner = `<div style="font:12px system-ui;background:#06243a;color:#2EF2C3;padding:8px 14px">E-mail preview · subject: <b style="color:#fff">${p.subject.replace(/</g, "&lt;")}</b> · Resend ${cfg.resendKey() ? "configured" : "NOT configured (preview only)"}</div>`;
   return new Response(p.html.replace(/<body([^>]*)>/, `<body$1>${banner}`), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 

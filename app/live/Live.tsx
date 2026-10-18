@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api, ago, hostOf } from "@/lib/client";
 import type { RelaySnapshot } from "@/components/RelayPanel";
 import { Flash, Kpi, PageHead, Panel, useAction, useApi, usd } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 interface LiveView { handle: string; kind: "browser_api" | "profile_setup"; session_id: string; profile_id: string | null; label: string | null; url: string | null; last_url: string | null; last_title: string | null; started_at: string; expires_at: string; minutes: number; est_cost_usd: number; actions: number; snapshot?: RelaySnapshot | null; error?: string }
 
@@ -117,8 +118,8 @@ export function Live() {
           right={
             <>
               <label className="row note" style={{ gap: 6 }}><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> auto-refresh</label>
-              <button className="btn sm" disabled={!!act.busy} onClick={() => send([{ op: "scan" }], "Refreshing")}>↻</button>
-              {cur.kind === "profile_setup" && <button className="btn sm paid" disabled={!!act.busy} onClick={saveProfile}>💾 Save login to profile</button>}
+              <button className="btn sm" disabled={!!act.busy} onClick={() => send([{ op: "scan" }], "Refreshing")}><Icon name="refresh" /></button>
+              {cur.kind === "profile_setup" && <button className="btn sm paid" disabled={!!act.busy} onClick={saveProfile}><Icon name="save" /> Save login to profile</button>}
               <button className="btn sm danger" disabled={!!act.busy} onClick={() => stop(cur.handle)}>■ Stop</button>
             </>
           }
@@ -129,7 +130,7 @@ export function Live() {
           </div>
           <div className="relay-grid">
             <figure className="relay-shot">
-              {cur.snapshot?.screenshot ? <img className="shot-frame" src={cur.snapshot.screenshot} alt={`Live screenshot of ${cur.snapshot.title}`} /> : <div className="empty">no screenshot yet — press ↻</div>}
+              {cur.snapshot?.screenshot ? <img className="shot-frame" src={cur.snapshot.screenshot} alt={`Live screenshot of ${cur.snapshot.title}`} /> : <div className="empty">no screenshot yet — press <Icon name="refresh" /></div>}
               <figcaption className="note">
                 {cur.snapshot?.title ?? cur.last_title ?? "—"} · <span className="mono">{hostOf(cur.snapshot?.url ?? cur.last_url ?? "")}</span>
                 {cur.snapshot?.captcha_present && <span className="chip miss" style={{ marginLeft: 8 }}>CAPTCHA</span>}
@@ -150,7 +151,7 @@ export function Live() {
                 </label>
               ))}
               <div className="row">
-                <button className="btn sm" disabled={!!act.busy} onClick={() => send(pushFills().length ? pushFills() : [{ op: "scan" }], "Typing")}>⌨ Apply fields</button>
+                <button className="btn sm" disabled={!!act.busy} onClick={() => send(pushFills().length ? pushFills() : [{ op: "scan" }], "Typing")}><Icon name="keyboard" /> Apply fields</button>
               </div>
               {buttons.length > 0 && <span className="label">Buttons / links</span>}
               <div className="row">
@@ -165,7 +166,7 @@ export function Live() {
         </Panel>
       )}
 
-      <Panel title={`Open sessions · ${sessions.length}`} right={<button className="btn sm" onClick={list.reload}>↻</button>}>
+      <Panel title={`Open sessions · ${sessions.length}`} right={<button className="btn sm" onClick={list.reload}><Icon name="refresh" /></button>}>
         {!sessions.length ? (
           <div className="empty">No live sessions. Browser minutes stop billing when a session is stopped or times out.</div>
         ) : (

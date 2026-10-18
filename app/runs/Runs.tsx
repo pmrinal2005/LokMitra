@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { api, ago, hostOf } from "@/lib/client";
 import { Flash, Json, Kpi, PageHead, Panel, useAction, useApi, usd } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 interface Log { id: string; surface: string; purpose: string; state_code?: string | null; scheme_id?: string | null; run_id?: string | null; status: string; steps?: number | null; cost_usd: number; latency_ms?: number | null; meta?: Record<string, unknown>; created_at: string }
 interface Rep { id: string; language: string; query: string; live_calls?: { search?: number; fetch_urls?: number; fetch_ok?: number; agent?: number } | null; elapsed_ms?: number | null; cost_usd: number; created_at: string }
@@ -62,11 +63,11 @@ export function Runs() {
               <select className="select" style={{ width: 130 }} value={surface} onChange={(e) => setSurface(e.target.value)}>
                 {SURFACES.map((s) => <option key={s} value={s}>{s || "all surfaces"}</option>)}
               </select>
-              <button className="btn sm" onClick={logs.reload}>↻</button>
+              <button className="btn sm" onClick={logs.reload}><Icon name="refresh" /></button>
             </>
           }
         >
-          {logs.error && <p className="note err">⚠ {logs.error}</p>}
+          {logs.error && <p className="note err"><Icon name="alert" /> {logs.error}</p>}
           {!rows.length ? (
             <div className="empty">{logs.loading ? "loading…" : "No calls logged yet."}</div>
           ) : (
@@ -96,8 +97,8 @@ export function Runs() {
       )}
 
       {tab === "tinyfish" && (
-        <Panel title={`TinyFish runs · ${tf.data?.pagination.total ?? "…"}`} sub="GET /v1/runs — includes runs started from the Mission Deck and other clients." right={<button className="btn sm" onClick={tf.reload}>↻</button>}>
-          {tf.error && <p className="note err">⚠ {tf.error}</p>}
+        <Panel title={`TinyFish runs · ${tf.data?.pagination.total ?? "…"}`} sub="GET /v1/runs — includes runs started from the Mission Deck and other clients." right={<button className="btn sm" onClick={tf.reload}><Icon name="refresh" /></button>}>
+          {tf.error && <p className="note err"><Icon name="alert" /> {tf.error}</p>}
           {!tf.data?.data.length ? (
             <div className="empty">{tf.loading ? "loading…" : "No runs on this account yet."}</div>
           ) : (
@@ -161,7 +162,7 @@ export function Runs() {
             {run.finished_at && <span className="chip">finished {ago(run.finished_at)}</span>}
             {run.streaming_url && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">live view ↗</a>}
           </div>
-          {run.error && <p className="note err">⚠ {run.error.category ? `${run.error.category}: ` : ""}{run.error.message}</p>}
+          {run.error && <p className="note err"><Icon name="alert" /> {run.error.category ? `${run.error.category}: ` : ""}{run.error.message}</p>}
           <div className="grid-2" style={{ marginTop: 12 }}>
             <div className="stack">
               <span className="label">Steps</span>

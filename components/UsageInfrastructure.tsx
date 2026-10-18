@@ -5,6 +5,7 @@ import { LiveRing } from "./LiveRing";
 import { useDeckData } from "@/hooks/useDeckData";
 import { useApi } from "./ui";
 import { ago, fmtUsd } from "@/lib/client";
+import { Icon } from "./Icon";
 
 interface RunRow { id: string; surface: string; purpose: string; state_code: string | null; scheme_id: string | null; run_id: string | null; status: string; steps: number | null; cost_usd: number | null; latency_ms: number | null; created_at: string }
 
@@ -66,7 +67,7 @@ export function UsageInfrastructure() {
             ))}
           </div>
         </header>
-        {runs.error && <p className="note err">⚠ {runs.error}</p>}
+        {runs.error && <p className="note err"><Icon name="alert" /> {runs.error}</p>}
         <div className="table-wrap" style={{ maxHeight: 420 }}>
           <table className="tbl">
             <thead>

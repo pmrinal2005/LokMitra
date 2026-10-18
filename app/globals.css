@@ -1053,3 +1053,21 @@ html.calm .jt-step.active .jt-dot { animation: none; }
   .consent-modal { padding: 16px; }
 }
 @media print { .journey-input, .consent-scrim { display: none !important; } }
+
+/* ---------- professional SVG icon set (components/Icon.tsx) ---------- */
+:root { --icon-gap: 6px; }
+.btn, .chip, .tag, .preset, .nav-pill, .sb-role { gap: var(--icon-gap); }
+.btn .ic, .chip .ic, .tag .ic { flex: none; }
+.btn:has(> .ic) { display: inline-flex; align-items: center; }
+.chip:has(> .ic) { display: inline-flex; align-items: center; }
+.jt-dot .ic { width: 16px; height: 16px; }
+.snap-ic .ic, .src-badge .ic { width: 16px; height: 16px; }
+.panel-title .ic, h3 .ic, h4 .ic, b > .ic { margin-right: 4px; vertical-align: -0.18em; }
+.note .ic { opacity: .9; }
+.tick-item .ic svg, .tick-item .ic .ic { color: currentColor; }
+@media (max-width: 640px) {
+  .journey-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .journey-head > .row { justify-content: space-between; flex-wrap: nowrap; }
+  .journey-head .journey-lang { flex: 1; min-width: 0; }
+  .journey-track .jt-label { display: none; }
+}

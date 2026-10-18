@@ -7,12 +7,14 @@ import { citizenId, fmtUsd } from "@/lib/client";
 import { langByCode } from "@/lib/lokmitra/languages";
 import { mdToHtml } from "@/lib/md";
 import { ReportView } from "./ReportView";
+import type { IconName } from "./Icon";
 import { RelayPanel } from "./RelayPanel";
 import type { UiKey } from "@/lib/i18n/ui-strings";
 import type { StructuredReport } from "@/lib/lokmitra/report-shape";
+import { Icon } from "./Icon";
 
 const STAGE_KEY: Record<StageId, UiKey> = { listen: "st_listen", understand: "st_understand", search: "st_search", fetch: "st_fetch", consent: "st_consent", agent: "st_agent", report: "st_report" };
-const STAGE_ICON: Record<StageId, string> = { listen: "🎙", understand: "🧠", search: "🔎", fetch: "📄", consent: "🔐", agent: "🐟", report: "📋" };
+const STAGE_ICON: Record<StageId, IconName> = { listen: "mic", understand: "brain", search: "search", fetch: "file", consent: "lock", agent: "bot", report: "clipboard" };
 
 const EXAMPLES: { t: string; l: string }[] = [
   { t: "Main Nashik ka kisan hoon, PM-KISAN ki eligibility aur aaj gehu ka bhaav kya hai?", l: "hi" },
@@ -200,7 +202,7 @@ export function SahayakJourney() {
       <ol className="journey-track" aria-label="Journey progress">
         {STAGES.map((k, i) => (
           <li key={k} className={`jt-step ${s.stages[k]}`} aria-current={j.activeStage === k ? "step" : undefined}>
-            <span className="jt-dot" aria-hidden="true">{s.stages[k] === "done" ? "✓" : s.stages[k] === "error" ? "!" : s.stages[k] === "skipped" ? "–" : STAGE_ICON[k]}</span>
+            <span className="jt-dot" aria-hidden="true">{s.stages[k] === "done" ? <Icon name="check" /> : s.stages[k] === "error" ? <Icon name="alert" /> : s.stages[k] === "skipped" ? "–" : <Icon name={STAGE_ICON[k]} />}</span>
             <span className="jt-label">{t(STAGE_KEY[k])}</span>
             {i < STAGES.length - 1 && <span className="jt-bar" aria-hidden="true" />}
           </li>
@@ -234,7 +236,7 @@ export function SahayakJourney() {
           {s.question && (
             <div className="journey-chat" aria-live="polite">
               <div className="bubble me">{s.question}</div>
-              {resumed && <div className="note">↺ {t("idle_resumed")}</div>}
+              {resumed && <div className="note"><Icon name="refresh" /> {t("idle_resumed")}</div>}
 
               {(s.phase === "working" || s.phase === "error" || (s.phase === "waiting" && !s.report)) && (
                 <div className={`bubble bot live ${s.phase === "error" ? "err" : ""}`}>
@@ -245,14 +247,14 @@ export function SahayakJourney() {
                   {s.searches.length > 0 && (
                     <div className="row journey-mini">
                       {s.searches.map((x, i) => (
-                        <span key={i} className={`chip ${x.error ? "miss" : "live"}`}>🔎 {x.scheme} · {x.results}{x.host ? ` · ${x.host}` : ""}</span>
+                        <span key={i} className={`chip ${x.error ? "miss" : "live"}`}><Icon name="search" /> {x.scheme} · {x.results}{x.host ? ` · ${x.host}` : ""}</span>
                       ))}
                     </div>
                   )}
                   {s.pages.length > 0 && (
                     <div className="row journey-mini">
                       {s.pages.map((p) => (
-                        <span key={p.url} className={`chip ${p.ok ? "hit" : "miss"}`} title={p.title ?? p.url}>📄 {p.host} {p.ok ? "✓" : "✕"}{p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""}</span>
+                        <span key={p.url} className={`chip ${p.ok ? "hit" : "miss"}`} title={p.title ?? p.url}><Icon name="file" /> {p.host} {p.ok ? <Icon name="check" size={11} /> : <Icon name="x" size={11} />}{p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""}</span>
                       ))}
                     </div>
                   )}
@@ -272,7 +274,7 @@ export function SahayakJourney() {
                 if (!c) return null;
                 return (
                   <div className="bubble bot otp">
-                    <b>🔐 {t("otp_title")}</b>
+                    <b><Icon name="lock" /> {t("otp_title")}</b>
                     <p className="note">{t("otp_body")}</p>
                     <RelayPanel
                       key={j.relaySeed(c.confirm_id)}
@@ -293,7 +295,7 @@ export function SahayakJourney() {
                   <div className="row journey-report-bar">
                     {ttsSupported() && (
                       <button className={`btn sm ${speaking ? "primary" : ""}`} onClick={toggleSpeak} aria-pressed={speaking}>
-                        {speaking ? `⏹ ${t("speak_stop")}` : `🔊 ${t("speak")}`}
+                        {speaking ? <><Icon name="stop" /> {t("speak_stop")}</> : <><Icon name="volume" /> {t("speak")}</>}
                       </button>
                     )}
                     {s.report.language !== "en" && (
@@ -301,7 +303,7 @@ export function SahayakJourney() {
                         {showEn ? langByCode(s.report.language).native : `EN ${t("english")}`}
                       </button>
                     )}
-                    <a className="btn sm" href={`/report/${s.report.report_id}`} target="_blank" rel="noreferrer">🖨 Slip + QR</a>
+                    <a className="btn sm" href={`/report/${s.report.report_id}`} target="_blank" rel="noreferrer"><Icon name="printer" /> Slip + QR</a>
                     {s.report.live_calls && (
                       <span className="note">● {s.report.live_calls.search} Search · {s.report.live_calls.fetch_ok}/{s.report.live_calls.fetch_urls} Fetch{s.report.elapsed_ms ? ` · ${(s.report.elapsed_ms / 1000).toFixed(1)}s` : ""}</span>
                     )}
@@ -342,7 +344,7 @@ export function SahayakJourney() {
             />
             <div className="journey-input-actions">
               <button type="button" className={`btn ${listening ? "paid" : ""}`} onClick={toggleMic} disabled={!speechOk} title={speechOk ? (listening ? t("mic_stop") : t("mic_start")) : t("mic_unsupported")} aria-pressed={listening}>
-                {listening ? `⏺ ${t("mic_stop")}` : `🎙 ${t("mic_start")}`}
+                {listening ? <><Icon name="record" /> {t("mic_stop")}</> : <><Icon name="mic" /> {t("mic_start")}</>}
               </button>
               {busy ? (
                 <button type="button" className="btn danger" onClick={j.cancel}>{t("cancel")}</button>
@@ -361,20 +363,20 @@ export function SahayakJourney() {
       {pendingConsent && !collapsed && typeof document !== "undefined" && createPortal(
         <div className="consent-scrim" role="presentation" onClick={(e) => e.target === e.currentTarget && j.deny(pendingConsent.confirm_id)}>
           <div className="consent-modal" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={modalRef}>
-            <h3 id="consent-title">🔐 {t("consent_title")}</h3>
+            <h3 id="consent-title"><Icon name="lock" /> {t("consent_title")}</h3>
             <p className="consent-scheme"><b>{pendingConsent.scheme_name}</b> · {pendingConsent.task} · <span className="mono">{pendingConsent.host}</span></p>
             <p>{t("consent_body", { host: pendingConsent.host, scheme: pendingConsent.scheme_name })}</p>
-            {pendingConsent.requires_otp && <p className="note">📱 {t("consent_otp_note")}</p>}
+            {pendingConsent.requires_otp && <p className="note"><Icon name="phone" /> {t("consent_otp_note")}</p>}
             {pendingConsent.fields.length > 0 && (
               <fieldset className="consent-fields">
                 <legend className="label">{t("consent_fields")}</legend>
                 {pendingConsent.fields.map((f) => (
                   <label key={f.key}>
-                    <span className="label">{f.label}{f.provided ? " ✓" : ""}</span>
+                    <span className="label">{f.label}{f.provided ? <> <Icon name="check" size={11} /></> : null}</span>
                     <input
                       className="input"
                       autoComplete="off"
-                      placeholder={f.provided ? "✓" : f.label}
+                      placeholder={f.provided ? "(provided)" : f.label}
                       value={ids[pendingConsent.confirm_id]?.[f.key] ?? ""}
                       onChange={(e) => setIds((m) => ({ ...m, [pendingConsent.confirm_id]: { ...(m[pendingConsent.confirm_id] ?? {}), [f.key]: e.target.value } }))}
                     />
@@ -384,8 +386,8 @@ export function SahayakJourney() {
             )}
             <p className="note" title="Informational estimate — no step limit or budget cap">● {t("consent_cost", { steps: pendingConsent.est_steps, cost: fmtUsd(pendingConsent.est_cost_usd) })}</p>
             <div className="row consent-actions">
-              <button className="btn paid" onClick={() => j.allow(pendingConsent.confirm_id, ids[pendingConsent.confirm_id] ?? {})}>✅ {t("consent_allow")}</button>
-              {pendingConsent.requires_otp && <button className="btn" onClick={() => j.otpStart(pendingConsent.confirm_id)}>📱 {t("otp_start")}</button>}
+              <button className="btn paid" onClick={() => j.allow(pendingConsent.confirm_id, ids[pendingConsent.confirm_id] ?? {})}><Icon name="check-circle" /> {t("consent_allow")}</button>
+              {pendingConsent.requires_otp && <button className="btn" onClick={() => j.otpStart(pendingConsent.confirm_id)}><Icon name="phone" /> {t("otp_start")}</button>}
               <button className="btn" onClick={() => j.deny(pendingConsent.confirm_id)}>{t("consent_deny")}</button>
               <a className="btn sm" href={pendingConsent.entry_url} target="_blank" rel="noreferrer noopener">{t("consent_diy")} ↗</a>
             </div>
@@ -402,7 +404,7 @@ function ConsentCard({ c, run, t, onOtp, otpOpen }: { c: ConsentReq; run?: impor
   if (c.decision === "denied")
     return (
       <div className="bubble bot muted">
-        🔐 <b>{c.scheme_name}</b> — {t("consent_skipped")} <a href={c.entry_url} target="_blank" rel="noreferrer noopener">{t("consent_diy")} ↗</a>
+        <Icon name="lock" /> <b>{c.scheme_name}</b> — {t("consent_skipped")} <a href={c.entry_url} target="_blank" rel="noreferrer noopener">{t("consent_diy")} ↗</a>
       </div>
     );
   if (!run) return null;
@@ -412,7 +414,7 @@ function ConsentCard({ c, run, t, onOtp, otpOpen }: { c: ConsentReq; run?: impor
   return (
     <div className={`bubble bot agent ${run.running ? "live" : ok ? "ok" : "warn"}`}>
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <b>🐟 {run.running ? t("agent_running", { host: run.host }) : ok ? t("agent_done") : run.needs_otp ? t("agent_blocked_otp") : t("agent_failed")}</b>
+        <b><Icon name="bot" /> {run.running ? t("agent_running", { host: run.host }) : ok ? t("agent_done") : run.needs_otp ? t("agent_blocked_otp") : t("agent_failed")}</b>
         <span className="note mono">{run.steps} {t("steps")}{run.cost_usd ? ` · ${fmtUsd(run.cost_usd)}` : ""}</span>
       </div>
       {run.streaming_url && run.running && (
@@ -425,9 +427,9 @@ function ConsentCard({ c, run, t, onOtp, otpOpen }: { c: ConsentReq; run?: impor
         </details>
       )}
       {!run.running && reg && <p><b>{c.scheme_name}:</b> {reg}</p>}
-      {!run.running && run.error && <p className="note err">⚠ {run.error}</p>}
+      {!run.running && run.error && <p className="note err"><Icon name="alert" /> {run.error}</p>}
       {!run.running && (run.needs_otp || run.needs_captcha) && !otpOpen && (
-        <button className="btn sm paid" onClick={onOtp}>📱 {t("otp_start")}</button>
+        <button className="btn sm paid" onClick={onOtp}><Icon name="phone" /> {t("otp_start")}</button>
       )}
     </div>
   );

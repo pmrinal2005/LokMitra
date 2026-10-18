@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PageHead, Panel } from "@/components/ui";
 import { api } from "@/lib/client";
+import { Icon } from "@/components/Icon";
 
 type Kb = { text: string; callback_data?: string; url?: string }[][];
 interface SimCall { method: string; at: string; text?: string; keyboard?: Kb; photo?: string | null; caption?: string; callback_text?: string }
@@ -75,7 +76,7 @@ export function BotSimulator() {
       out.forEach((c, i) => push({ from: "bot", html: tgHtml(c.text ?? c.caption ?? ""), keyboard: c.keyboard, photo: c.photo, ms: i === out.length - 1 ? r.elapsed_ms : undefined }));
       if (!out.length) push({ from: "sys", text: `(no reply · ${r.elapsed_ms} ms)` });
     } catch (e) {
-      push({ from: "sys", text: `⚠ ${(e as Error).message}` });
+      push({ from: "sys", text: `Error: ${(e as Error).message}` });
     } finally {
       setBusy(false);
     }
@@ -99,13 +100,13 @@ export function BotSimulator() {
       >
         <span className={`chip ${info?.tg ? "hit" : ""}`}>{info ? (info.tg ? "TELEGRAM_BOT_TOKEN set" : "no bot token · simulator only") : "simulator"}</span>
         <span className="chip">chat sim{chat}</span>
-        <button className="btn sm" onClick={reset}>↺ New chat</button>
+        <button className="btn sm" onClick={reset}><Icon name="refresh" /> New chat</button>
       </PageHead>
 
       <div className="sim-grid">
         <section className="sim-phone" aria-label="Simulated Telegram chat">
           <header className="sim-top">
-            <span className="sim-avatar" aria-hidden="true">🐟</span>
+            <span className="sim-avatar" aria-hidden="true"><Icon name="bot" /></span>
             <div>
               <b>LokMitra Bot</b>
               <small>{busy ? "typing…" : "bot · online"}</small>
@@ -130,7 +131,7 @@ export function BotSimulator() {
                               <a key={bi} className="sim-kb-btn" href={b.url} target="_blank" rel="noreferrer noopener">{b.text} ↗</a>
                             ) : (
                               <button key={bi} className={`sim-kb-btn ${b.callback_data && PAID.test(b.callback_data) ? "paid" : ""}`} disabled={busy} onClick={() => send({ callback_data: b.callback_data }, `[${b.text}]`)} title={b.callback_data}>
-                                {b.callback_data && PAID.test(b.callback_data) ? "💲 " : ""}
+                                {b.callback_data && PAID.test(b.callback_data) ? <><Icon name="dollar" size={11} /> </> : null}
                                 {b.text}
                               </button>
                             ),
@@ -142,7 +143,7 @@ export function BotSimulator() {
                 </div>
               ),
             )}
-            {busy && <p className="sim-sys">🔎 LokMitra is working… (Search + Fetch are free; first-time portals may take ~20–60 s)</p>}
+            {busy && <p className="sim-sys"><Icon name="search" /> LokMitra is working… (Search + Fetch are free; first-time portals may take ~20–60 s)</p>}
             <div ref={end} />
           </div>
           <div className="sim-presets">
@@ -172,7 +173,7 @@ export function BotSimulator() {
               <div key={i} className="sim-log">
                 <span className={`chip ${c.method === "sendMessage" ? "hit" : ""}`}>{c.method}</span>
                 <span className="note mono">{new Date(c.at).toLocaleTimeString("en-IN")}</span>
-                {c.keyboard && <span className="chip">⌨ {c.keyboard.flat().length} buttons</span>}
+                {c.keyboard && <span className="chip"><Icon name="keyboard" /> {c.keyboard.flat().length} buttons</span>}
                 {(c.text || c.caption || c.callback_text) && <div className="note mono sim-log-text">{(c.text || c.caption || c.callback_text || "").replace(/<[^>]+>/g, "").slice(0, 220)}</div>}
               </div>
             ))}
