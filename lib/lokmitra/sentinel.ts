@@ -10,6 +10,7 @@ import { logRun } from "./store";
 import { clip, hostOf, nowIso, sha256 } from "./util";
 import { sendEmail } from "./email";
 import { tgSend } from "./telegram";
+import { factCheck, type FactResult } from "./facts";
 
 /**
  * Deadline, Circular & Compliance Sentinel — TinyFish Monitor (never Agent).
@@ -91,7 +92,10 @@ export async function ensureSentinel(opts: { scheme_id: string; state_code?: str
   const res = await create_monitor(body);
   const row: SentinelRow = { monitor_id: res.monitor.id, monitor_type: type, scheme_id: scheme.id, state_code: state, kind: opts.kind, target, schedule_cron: cron, purpose, last_run_at: nowIso(), last_change: null, created_at: nowIso() };
   await db.insert("sentinels", row as unknown as Row, { onConflict: "monitor_id" });
-  await safe(db.insert("monitor_events", { monitor_id: row.monitor_id, run_id: (res.run as { id?: string } | undefined)?.id ?? null, source: "baseline", changed: false, summary: "baseline captured", payload: { baseline: true, target }, created_at: nowIso() }), []);
+  const base = (res.run ?? {}) as PagePayload;
+  const baseText = textOf(base);
+  const baseFacts = type === "fetch" && baseText ? factCheck(scheme.id, baseText, target).filter((f) => f.status !== "not_stated") : [];
+  await safe(db.insert("monitor_events", { monitor_id: row.monitor_id, run_id: (res.run as { id?: string } | undefined)?.id ?? null, source: "baseline", changed: false, summary: baseFacts.length ? `baseline captured · fact-check: ${factSummary(baseFacts)}` : "baseline captured", payload: { baseline: true, target, ...(baseText ? { hash: sha256(baseText), excerpt: baseText.slice(0, 6000) } : {}), facts: baseFacts }, created_at: nowIso() }), []);
   return { sentinel: row, created: true, baseline: res.run };
 }
 
@@ -162,9 +166,9 @@ async function prevHash(monitorId: string) {
 }
 
 /** Process a Monitor result (scheduled webhook or run-now) and fan out alerts if something changed. */
-export async function processMonitorResult(payload: PagePayload, source: "webhook" | "run_now"): Promise<{ changed: boolean; summary: string; notified: number; monitor_id: string | null }> {
+export async function processMonitorResult(payload: PagePayload, source: "webhook" | "run_now"): Promise<{ changed: boolean; summary: string; notified: number; monitor_id: string | null; facts?: FactResult[] }> {
   const monitorId = payload.fetch_monitor_id ?? payload.search_monitor_id ?? null;
-  if (!monitorId) return { changed: false, summary: "no monitor id", notified: 0, monitor_id: null };
+  if (!monitorId) return { changed: false, summary: "no monitor id", notified: 0, monitor_id: null, facts: [] };
   const s = await getSentinel(monitorId);
   const text = textOf(payload);
   const hash = sha256(text);
@@ -190,14 +194,75 @@ export async function processMonitorResult(payload: PagePayload, source: "webhoo
       if (x?.deadline) summary += ` · Deadline: ${x.deadline}`;
     }
   }
+  // Deterministic compliance fact-check (free, no LLM): guideline facts vs the live page text
+  let facts: FactResult[] = [];
+  if (s && !payload.search_monitor_id && text) {
+    facts = factCheck(s.scheme_id, text, s.target.startsWith("http") ? s.target : null).filter((f) => f.status !== "not_stated");
+    const bad = facts.filter((f) => f.status === "contradiction");
+    if (bad.length && (s.kind === "compliance" || changed)) {
+      const note = `⚠ Guideline/portal contradiction (deterministic): ${bad.map((f) => `${f.label} shows "${f.found}" vs guideline ${f.canonical}`).join("; ")}`;
+      if (!summary.includes("deterministic")) summary = changed ? `${summary} ${note}` : note;
+      if (s.kind === "compliance" && !changed) changed = !(await lastFactsHadSame(monitorId, bad));
+    }
+  }
   let notified = 0;
   if (changed && s) notified = await fanOut(s, summary);
-  await safe(db.insert("monitor_events", { monitor_id: monitorId, run_id: payload.id ?? null, source, changed, summary, payload: { hash, excerpt: text.slice(0, 6000), urls: (payload.results ?? []).map((r) => r.url).slice(0, 10), errors: payload.errors ?? [] }, notified, created_at: nowIso() }), []);
+  await safe(db.insert("monitor_events", { monitor_id: monitorId, run_id: payload.id ?? null, source, changed, summary: facts.length && summary === "no change" ? `no change · fact-check: ${factSummary(facts)}` : summary, payload: { hash, excerpt: text.slice(0, 6000), urls: (payload.results ?? []).map((r) => r.url).slice(0, 10), errors: payload.errors ?? [], facts }, notified, created_at: nowIso() }), []);
   if (s) await safe(db.update("sentinels", { monitor_id: monitorId }, { last_run_at: nowIso(), ...(changed ? { last_change: { summary, at: nowIso() } } : {}) }), []);
   // scheduled runs are billed per run ($0.005 + free Fetch/Search); run-now was already billed in run_monitor_now()
   const cost = source === "webhook" ? (await rates()).monitor : 0;
   void logRun({ surface: "monitor", purpose: `sentinel_${source}`, scheme_id: s?.scheme_id, state_code: s?.state_code, run_id: monitorId, cost_usd: cost, meta: { changed, notified } });
-  return { changed, summary, notified, monitor_id: monitorId };
+  return { changed, summary, notified, monitor_id: monitorId, facts };
+}
+
+function factSummary(f: FactResult[]) {
+  return f.map((x) => `${x.label} ${x.status === "confirmed" ? "✓" : "⚠"}`).join(" · ");
+}
+
+/** Avoid re-alerting the same standing contradiction on every scheduled run. */
+async function lastFactsHadSame(monitorId: string, bad: FactResult[]) {
+  const ev = await safe(db.select<Row>("monitor_events", { eq: { monitor_id: monitorId }, order: { col: "created_at" }, limit: 3 }), []);
+  const prev = ev.map((e) => ((e.payload as Row | undefined)?.facts as FactResult[] | undefined) ?? []).find((f) => f.length);
+  if (!prev) return false;
+  return bad.every((b) => prev.some((p) => p.fact_id === b.fact_id && p.status === "contradiction" && p.found === b.found));
+}
+
+/* ------------------------------------------------------------------ */
+/* Starter pack — one click registers the essential sentinels         */
+/* ------------------------------------------------------------------ */
+export const STARTER_PACK: { scheme_id: string; kind: SentinelKind; scope: "state" | "central"; why: string }[] = [
+  { scheme_id: "pmfby", kind: "deadline", scope: "state", why: "Kharif / Rabi enrolment cut-off for your state" },
+  { scheme_id: "nsp", kind: "deadline", scope: "central", why: "National Scholarship Portal last date" },
+  { scheme_id: "pm-kisan", kind: "compliance", scope: "central", why: "₹6,000 / 3 instalments guideline vs live portal" },
+  { scheme_id: "ayushman", kind: "compliance", scope: "central", why: "₹5 lakh cover guideline vs live portal" },
+  { scheme_id: "pm-kisan", kind: "circular", scope: "central", why: "New PM-KISAN circulars / instalment notices" },
+];
+
+export async function starterPackPlan(state: string) {
+  const r = await rates();
+  const existing = await listSentinels();
+  const items = STARTER_PACK.map((p) => {
+    const st = p.scope === "state" ? state || "IN" : "IN";
+    const ex = existing.find((e) => e.scheme_id === p.scheme_id && e.state_code === st && e.kind === p.kind);
+    return { ...p, state_code: st, scheme_name: schemeById(p.scheme_id)?.name ?? p.scheme_id, exists: !!ex, monitor_id: ex?.monitor_id ?? null };
+  });
+  const toCreate = items.filter((i) => !i.exists).length;
+  return { items, to_create: toCreate, est_cost_usd: Math.round(toCreate * r.monitor * 1000) / 1000, per_run_usd: r.monitor };
+}
+
+export async function registerStarterPack(state: string, opts: { user_id?: string | null; email?: string | null; schedule_cron?: string } = {}) {
+  const plan = await starterPackPlan(state);
+  const results: { scheme_id: string; kind: SentinelKind; state_code: string; created: boolean; monitor_id: string | null; error?: string }[] = [];
+  for (const it of plan.items) {
+    try {
+      const r = await ensureSentinel({ scheme_id: it.scheme_id, state_code: it.state_code, kind: it.kind, schedule_cron: opts.schedule_cron });
+      if (opts.user_id) await safe(subscribe({ monitor_id: r.sentinel.monitor_id, user_id: opts.user_id, email: opts.email ?? null }), null);
+      results.push({ scheme_id: it.scheme_id, kind: it.kind, state_code: it.state_code, created: r.created, monitor_id: r.sentinel.monitor_id });
+    } catch (e) {
+      results.push({ scheme_id: it.scheme_id, kind: it.kind, state_code: it.state_code, created: false, monitor_id: null, error: (e as Error).message });
+    }
+  }
+  return { plan, results, created: results.filter((r) => r.created).length };
 }
 
 async function fanOut(s: SentinelRow, summary: string): Promise<number> {

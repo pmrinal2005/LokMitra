@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, citizenId, fmtUsd, hostOf, ssePost } from "@/lib/client";
 import { mdToHtml } from "@/lib/md";
 import { RelayPanel } from "@/components/RelayPanel";
+import { ReportView } from "@/components/ReportView";
+import type { StructuredReport } from "@/lib/lokmitra/report-shape";
 
 /** CSC operators share one tablet: a stable "csc:<id>" identity (rate limits + report history per centre). */
 function cscUserId(name: string) {
@@ -23,7 +25,8 @@ interface Turn {
   cache: CacheEv[];
   pages: { url: string; title: string | null; cached: boolean; chars: number; error: string | null }[];
   sections: Section[];
-  report?: { report_id: string; summary_local: string; summary_en: string; language: string; cache_hits?: number; cache_misses?: number; elapsed_ms?: number; follow_up?: boolean };
+  report?: { report_id: string; summary_local: string; summary_en: string; language: string; cache_hits?: number; cache_misses?: number; elapsed_ms?: number; follow_up?: boolean; structured?: StructuredReport | null };
+  structured?: StructuredReport | null;
   intent?: { intent: Record<string, unknown>; via: string };
   error?: string;
   done: boolean;
@@ -57,6 +60,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
   const [ids, setIds] = useState<Record<string, Record<string, string>>>({});
   const [email, setEmail] = useState("");
   const [mailNote, setMailNote] = useState<Record<string, string>>({});
+  const [view, setView] = useState<Record<string, "cards" | "text" | "en">>({});
   const [relayFor, setRelayFor] = useState<Record<string, string | null>>({}); // gate key → confirm id the relay was started from
   const recRef = useRef<InstanceType<SR> | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -132,7 +136,8 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
           else if (event === "cache") patchTurn(id, (t) => ({ ...t, cache: [...t.cache, data as unknown as CacheEv] }));
           else if (event === "fetch") patchTurn(id, (t) => ({ ...t, pages: (data.pages as Turn["pages"]) ?? [] }));
           else if (event === "section") patchTurn(id, (t) => ({ ...t, sections: [...t.sections.filter((s) => !(s.scheme_id === data.scheme_id && s.task === data.task)), data as unknown as Section] }));
-          else if (event === "report") patchTurn(id, (t) => ({ ...t, report: data as unknown as Turn["report"] }));
+          else if (event === "structured") patchTurn(id, (t) => ({ ...t, structured: data as unknown as StructuredReport }));
+          else if (event === "report") patchTurn(id, (t) => ({ ...t, report: data as unknown as Turn["report"], structured: (data.structured as StructuredReport | undefined) ?? t.structured }));
           else if (event === "error") patchTurn(id, (t) => ({ ...t, error: String(data.message ?? "error") }));
         },
         ctrl.signal,
@@ -341,12 +346,27 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
 
               {t.report && (
                 <div style={{ marginTop: 12 }}>
-                  <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(t.report.summary_local) }} />
-                  {t.report.language !== "en" && t.report.summary_en !== t.report.summary_local && (
-                    <details style={{ marginTop: 8 }}>
-                      <summary className="note" style={{ cursor: "pointer" }}>English version</summary>
-                      <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(t.report.summary_en) }} />
-                    </details>
+                  {t.structured && !t.report.follow_up && (
+                    <div className="row" style={{ marginBottom: 8 }} role="tablist" aria-label="Report view">
+                      {(["cards", "text", ...(t.report.language !== "en" ? ["en"] : [])] as ("cards" | "text" | "en")[]).map((v) => (
+                        <button key={v} role="tab" aria-selected={(view[t.id] ?? "cards") === v} className={`btn sm ${(view[t.id] ?? "cards") === v ? "primary" : ""}`} onClick={() => setView((m) => ({ ...m, [t.id]: v }))}>
+                          {v === "cards" ? "▦ Structured report" : v === "text" ? "☰ Plain text" : "EN English"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {t.structured && !t.report.follow_up && (view[t.id] ?? "cards") !== "text" ? (
+                    <ReportView r={t.structured} lang={t.report.language} showEnglish={view[t.id] === "en"} />
+                  ) : (
+                    <>
+                      <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(t.report.summary_local) }} />
+                      {t.report.language !== "en" && t.report.summary_en !== t.report.summary_local && (
+                        <details style={{ marginTop: 8 }}>
+                          <summary className="note" style={{ cursor: "pointer" }}>English version</summary>
+                          <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(t.report.summary_en) }} />
+                        </details>
+                      )}
+                    </>
                   )}
                   <hr className="hr" style={{ margin: "12px 0" }} />
                   <div className="row" style={{ justifyContent: "space-between" }}>
@@ -356,6 +376,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     {!t.report.follow_up && (
                       <div className="row">
                         <a className="btn sm" href={`/report/${t.report.report_id}`} target="_blank" rel="noreferrer">🖨 Printable slip + QR</a>
+                        <a className="btn sm" href={`/api/lokmitra/report/${t.report.report_id}/email?preview=1`} target="_blank" rel="noreferrer" title="Preview the structured HTML e-mail">👁 Email preview</a>
                         <input className="input" style={{ width: 200, padding: "6px 10px" }} placeholder="email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                         <button className="btn sm" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)} onClick={() => emailReport(t.report!.report_id)}>📧 Email</button>
                         {mailNote[t.report.report_id] && <span className="note">{mailNote[t.report.report_id]}</span>}

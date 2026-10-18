@@ -285,7 +285,7 @@ export async function translate(text: string, target: string, opts: { source?: s
   const lang = langByCode(target);
   if (target === (opts.source ?? "en") || !cfg.groqKey()) return { text, via: "none" };
   try {
-    const out = await chatChain([cfg.groqModelTranslate(), cfg.groqModelMid(), cfg.groqModelHeavy()], {
+    const out = await chatChain(translateModels(), {
       purpose: opts.purpose ?? "translate",
       system: `You are a careful translator for Indian citizens with low literacy. Translate the user's text into ${lang.name} (${lang.native}) using simple, everyday, respectful spoken ${lang.name}. Keep scheme names (PM-KISAN, Ayushman, eKYC), numbers, ₹ amounts, URLs, phone numbers and markdown formatting unchanged. Output ONLY the translation.`,
       user: text.slice(0, 8000),
@@ -297,6 +297,82 @@ export async function translate(text: string, target: string, opts: { source?: s
   } catch (e) {
     console.warn("[lokmitra:translate]", (e as Error).message);
     return { text, via: "none" };
+  }
+}
+
+/**
+ * Translation chain models, in order: GROQ_MODEL_TRANSLATE (default qwen/qwen3-8b-27b as specified),
+ * then Groq's production Qwen3 (qwen/qwen3-32b), then gpt-oss-20b / 120b. The first one that answers wins,
+ * so a renamed/retired model id never breaks localisation.
+ */
+export function translateModels() {
+  return [...new Set([cfg.groqModelTranslate(), "qwen/qwen3-32b", cfg.groqModelMid(), cfg.groqModelHeavy()].filter(Boolean))];
+}
+
+/** Batched translation of many short strings in ONE Groq call (JSON in / JSON out, order preserved). */
+export async function translateBatch(texts: string[], target: string, opts: { purpose?: string } = {}): Promise<{ texts: string[]; via: "groq" | "none"; model?: string }> {
+  const clean = texts.map((t) => String(t ?? ""));
+  if (target === "en" || !cfg.groqKey() || !clean.some((t) => t.trim())) return { texts: clean, via: "none" };
+  const lang = langByCode(target);
+  const out = [...clean];
+  // keep each request small enough for fast models: ~6k chars per chunk
+  const chunks: number[][] = [];
+  let cur: number[] = [];
+  let size = 0;
+  clean.forEach((t, i) => {
+    if (size + t.length > 6000 && cur.length) {
+      chunks.push(cur);
+      cur = [];
+      size = 0;
+    }
+    cur.push(i);
+    size += t.length;
+  });
+  if (cur.length) chunks.push(cur);
+  let usedModel: string | undefined;
+  let any = false;
+  for (const idxs of chunks) {
+    const payload = Object.fromEntries(idxs.map((i, k) => [String(k), clean[i]]));
+    let last: unknown;
+    for (const m of translateModels()) {
+      try {
+        const raw = await chat({
+          model: m,
+          purpose: opts.purpose ?? "translate_batch",
+          system: `Translate every JSON value into simple, respectful, everyday spoken ${lang.name} (${lang.native}) for a low-literacy Indian citizen. Keep scheme names (PM-KISAN, Ayushman, eKYC, e-Shram, PMFBY, NSP), numbers, ₹ amounts, dates, URLs, phone numbers and emoji unchanged. Return ONLY a JSON object with the SAME keys.`,
+          user: JSON.stringify(payload),
+          json: true,
+          temperature: 0.1,
+          maxTokens: 4000,
+          timeoutMs: 35_000,
+        });
+        const j = parseJson<Record<string, unknown>>(raw);
+        if (!j) throw new GroqError(502, "translation returned non-JSON");
+        idxs.forEach((i, k) => {
+          const v = j[String(k)];
+          if (typeof v === "string" && v.trim()) out[i] = v.trim();
+        });
+        usedModel = m;
+        any = true;
+        break;
+      } catch (e) {
+        last = e;
+        if (e instanceof GroqError && e.status === 503) break;
+      }
+    }
+    if (!any && last) console.warn("[lokmitra:translateBatch]", (last as Error).message);
+  }
+  return { texts: out, via: any ? "groq" : "none", model: usedModel };
+}
+
+/** Small JSON helper (heavy → mid → light) that never throws; returns null when Groq is missing/down. */
+export async function chatJson<T>(o: { system: string; user: string; purpose: string; maxTokens?: number }): Promise<T | null> {
+  if (!cfg.groqKey()) return null;
+  try {
+    const raw = await chatChain([cfg.groqModelHeavy(), cfg.groqModelMid(), cfg.groqModelLight()], { ...o, json: true, temperature: 0.1, maxTokens: o.maxTokens ?? 400, timeoutMs: 20_000 });
+    return parseJson<T>(raw);
+  } catch {
+    return null;
   }
 }
 

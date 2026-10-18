@@ -1,7 +1,9 @@
 import "server-only";
 import { cfg } from "./config";
 import { db, safe } from "./db";
-import { extractFromMarkdown, followUp, parseIntent, synthesize, translate, type Intent, type SectionInput, type SubQuery } from "./groq";
+import { extractFromMarkdown, followUp, parseIntent, type Intent, type SectionInput, type SubQuery } from "./groq";
+import { buildReport, localizeReport, reportMarkdown, type SynthSection } from "./synthesis";
+import type { StructuredReport } from "./report-shape";
 import { langByCode } from "./languages";
 import { fetch_clean_markdown, rates, type FetchedPage } from "./ops";
 import { cacheState, getPortal, resolvePortal, type PortalRow } from "./portal";
@@ -50,6 +52,7 @@ export interface AskResult {
   sections: Section[];
   summary_en: string;
   summary_local: string;
+  structured?: StructuredReport | null;
   sources: string[];
   cache_hits: number;
   cache_misses: number;
@@ -245,6 +248,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
 
   /* ---- build sections ---- */
   const sections: Section[] = [];
+  const pagesBySection = new Map<string, { url: string; text: string }[]>();
   for (const r of resolved) {
     const { sub, scheme } = r;
     const base = { scheme_id: scheme.id, scheme_name: scheme.name, task: sub.task, diy: scheme.diy, benefit: scheme.benefit, cache: r.hit ? "hit" : "miss", portal_state: r.portalState } as const;
@@ -266,20 +270,23 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     }
     const urls = urlPlan.get(`${scheme.id}:${sub.task}`) ?? [];
     const ps = urls.map((u) => byUrl.get(u)).filter(Boolean) as FetchedPage[];
+    pagesBySection.set(`${scheme.id}:${sub.task}`, ps.filter((p) => p.text).map((p) => ({ url: shownUrl(p), text: p.text })));
     const { data, status } = await extractSection(scheme, sub, ps, intent);
     const sec: Section = { ...base, status, data, sources: ps.filter((p) => p.text).map((p) => shownUrl(p)).concat(ps.length ? [] : [scheme.entry]), excerpt_sources: ps.map((p) => ({ url: p.url, title: p.title, cached: p.cached, error: p.error })) };
     sections.push(sec);
     await emit("section", sec as unknown as Record<string, unknown>);
   }
 
-  /* ---- synthesis + localisation ---- */
-  await emit("stage", { stage: "synthesis", message: "Writing your Citizen Benefit Report…" });
-  const { summary_en } = await synthesize({ query: text, intent, sections });
-  let summary_local = summary_en;
+  /* ---- synthesis (structured, sector-grouped, contradiction-aware) + localisation ---- */
+  await emit("stage", { stage: "synthesis", message: "Writing your structured Citizen Benefit Report (sectors · eligibility · fact-check · next steps)…" });
+  const synthIn: SynthSection[] = sections.map((s) => ({ ...s, pages: pagesBySection.get(`${s.scheme_id}:${s.task}`) ?? [], confirm: s.confirm ? { confirm_id: s.confirm.confirm_id, est_steps: s.confirm.est_steps, est_cost_usd: s.confirm.est_cost_usd, entry_url: s.confirm.entry_url, requires_otp: s.confirm.requires_otp } : undefined }));
+  let structured = await buildReport({ query: text, intent, sections: synthIn, language: replyLang });
   if (replyLang !== "en") {
-    await emit("stage", { stage: "translate", message: `Translating into ${langByCode(replyLang).native}…` });
-    summary_local = (await translate(summary_en, replyLang, { purpose: "translate_report" })).text;
+    await emit("stage", { stage: "translate", message: `Translating into ${langByCode(replyLang).native} (offline glossary labels + Groq translation chain)…` });
+    structured = await localizeReport(structured, replyLang);
   }
+  const { summary_en, summary_local } = reportMarkdown(structured, replyLang);
+  await emit("structured", structured as unknown as Record<string, unknown>);
   const sources = [...new Set(sections.flatMap((s) => s.sources))].slice(0, 20);
   const cache_hits = sections.filter((s) => s.cache === "hit").length;
   const cache_misses = sections.length - cache_hits;
@@ -294,6 +301,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
       sections: sections.map((s) => ({ ...s, data: JSON.parse(clip(JSON.stringify(s.data ?? null), 6000).replace(/…$/, "") || "null") ?? s.data })),
       summary_en,
       summary_local,
+      structured,
       sources,
       cost_usd: 0,
       cache_hits,
@@ -306,8 +314,8 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   await safe(sessions.put("chat", { summary_en, report_id }, 3600 * 6, { id: `chat_${userId}`.slice(0, 128), user_id: userId }), null);
   void logRun({ surface: "llm", purpose: "report", state_code: intent.state_code, cache: cache_misses ? "miss" : "hit", latency_ms: Date.now() - t0, meta: { sections: sections.length, via, lang: replyLang, channel: input.channel ?? "web" } });
 
-  const result: AskResult = { report_id, language: replyLang, intent, intent_via: via, sections, summary_en, summary_local, sources, cache_hits, cache_misses, cost_usd: 0, elapsed_ms: Date.now() - t0 };
-  await emit("report", { report_id, summary_en, summary_local, language: replyLang, sources, cache_hits, cache_misses, elapsed_ms: result.elapsed_ms });
+  const result: AskResult = { report_id, language: replyLang, intent, intent_via: via, sections, summary_en, summary_local, structured, sources, cache_hits, cache_misses, cost_usd: 0, elapsed_ms: Date.now() - t0 };
+  await emit("report", { report_id, summary_en, summary_local, language: replyLang, sources, cache_hits, cache_misses, elapsed_ms: result.elapsed_ms, structured });
   return result;
 }
 

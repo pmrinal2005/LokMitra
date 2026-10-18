@@ -788,3 +788,61 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .slip-tbl th, .slip-tbl td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
 .slip-tbl th { background: #f2f6f5; }
 .slip .qr svg { width: 110px; height: 110px; display: block; margin: 0 auto 4px; }
+
+/* ── Structured Citizen Benefit Report (P4) ───────────────────────────── */
+.report-view { display: flex; flex-direction: column; gap: 12px; }
+.rv-headline { margin: 0; font-size: 15px; line-height: 1.5; color: var(--pearl); }
+.rv-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+.rv-sectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.rv-sector { border-radius: 16px; border: 1px solid var(--hair-strong); background: rgba(6,9,15,.45); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.rv-sector-h { margin: 0; font-family: var(--font-display); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--teal); display: flex; gap: 8px; align-items: center; }
+.sec-health .rv-sector-h { color: #4FD9FF; } .sec-education .rv-sector-h { color: #9ad7ff; } .sec-land .rv-sector-h { color: var(--ember); }
+.sec-labour .rv-sector-h { color: #ffd08a; } .sec-msme .rv-sector-h { color: #c7a6ff; } .sec-agriculture .rv-sector-h { color: var(--jade); }
+.rv-item { border-top: 1px dashed var(--hair-strong); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rv-item:first-of-type { border-top: 0; padding-top: 0; }
+.rv-item-h { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rv-item-h b { font-size: 14px; }
+.verdict { font-family: var(--font-mono); font-size: 10.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
+.v-likely { color: var(--jade); border-color: rgba(110,242,160,.45); background: rgba(110,242,160,.08); }
+.v-check { color: var(--ember); border-color: rgba(255,180,79,.45); background: rgba(255,180,79,.08); }
+.v-unlikely { color: var(--coral); border-color: rgba(255,92,122,.45); background: rgba(255,92,122,.08); }
+.v-na { color: var(--fog); border-color: var(--hair-strong); }
+.chip.st-error { color: var(--coral); } .chip.st-needs_confirmation, .chip.st-needs_otp { color: var(--ember); } .chip.st-ok { color: var(--jade); }
+.rv-facts { margin: 0; display: grid; gap: 3px; }
+.rv-facts > div { display: grid; grid-template-columns: 96px 1fr; gap: 8px; font-size: 12.5px; }
+.rv-facts dt { color: var(--fog); font-family: var(--font-mono); font-size: 11px; }
+.rv-facts dd { margin: 0; color: var(--pearl); word-break: break-word; }
+.rv-why, .rv-diy { margin: 0; font-size: 12px; color: var(--fog); }
+.rv-why span, .rv-diy span { color: var(--pearl); font-weight: 600; }
+.rv-fc { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+.rv-fc-h { color: var(--fog); font-family: var(--font-mono); }
+.fc { padding: 2px 7px; border-radius: 8px; font-family: var(--font-mono); font-size: 10.5px; border: 1px solid; }
+.fc-confirmed { color: var(--jade); border-color: rgba(110,242,160,.35); }
+.fc-contradiction { color: var(--coral); border-color: rgba(255,92,122,.45); background: rgba(255,92,122,.06); }
+.rv-src { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11.5px; }
+.rv-src a, .rv-block a { color: var(--aqua, #4fd9ff); }
+.rv-block { border-radius: 14px; border: 1px solid var(--hair-strong); padding: 10px 14px; background: rgba(6,9,15,.35); }
+.rv-block h4 { margin: 0 0 6px; font-size: 13px; letter-spacing: .04em; }
+.rv-block ul, .rv-block ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; }
+.rv-block.warn { border-color: rgba(255,92,122,.4); background: linear-gradient(160deg, rgba(255,92,122,.07), rgba(6,9,15,.35)); }
+.rv-block.okay h4 { color: var(--jade); }
+.rv-block.steps { border-color: rgba(46,242,195,.35); }
+.rv-also { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.rv-also-card { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 12px; border: 1px solid var(--hair-strong); color: inherit !important; text-decoration: none; background: rgba(46,242,195,.04); }
+.rv-also-card:hover { border-color: rgba(46,242,195,.45); }
+.rv-also-card small { font-size: 11.5px; color: var(--pearl); } .rv-also-card small.fog { color: var(--fog); }
+/* print / slip palette */
+.report-view.print { color: #111; }
+.report-view.print .rv-headline, .report-view.print .rv-facts dd, .report-view.print .rv-why span, .report-view.print .rv-diy span, .report-view.print .rv-also-card small { color: #111; }
+.report-view.print .rv-sector, .report-view.print .rv-block, .report-view.print .rv-also-card { background: #fff; border-color: #ccd; }
+.report-view.print .rv-sector-h { color: #0b5d4b !important; }
+.report-view.print .rv-facts dt, .report-view.print .rv-why, .report-view.print .rv-diy, .report-view.print .rv-fc-h, .report-view.print .chip, .report-view.print .rv-also-card small.fog { color: #444; border-color: #ccd; }
+.report-view.print .rv-src a, .report-view.print .rv-block a { color: #0b5d4b; }
+.report-view.print .fc-confirmed, .report-view.print .v-likely { color: #106b3a; border-color: #8cc9a5; background: #eef8f1; }
+.report-view.print .fc-contradiction, .report-view.print .v-unlikely { color: #a3122e; border-color: #e59aa8; background: #fdf0f2; }
+.report-view.print .v-check { color: #8a5300; border-color: #e8c27f; background: #fff7e8; }
+.report-view.print .rv-block.warn { background: #fdf0f2; }
+.slip .token-box { display: flex; gap: 14px; align-items: center; border: 1px dashed #99a; border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
+.slip .token-box svg { width: 96px; height: 96px; }
+.slip .token-code { font-family: var(--font-mono); font-size: 18px; letter-spacing: .18em; font-weight: 600; }
+@media print { .slip-actions, .sidebar, .mobile-bar, .no-print { display: none !important; } .shell { display: block !important; } .slip { box-shadow: none; margin: 0 auto; } .rv-sectors { grid-template-columns: 1fr 1fr; } .rv-sector { break-inside: avoid; } }
