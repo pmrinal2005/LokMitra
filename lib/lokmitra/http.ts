@@ -69,3 +69,13 @@ export function sse(req: Request, run: (send: (event: string, data: unknown) => 
     headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" },
   });
 }
+
+/** Public origin of this request (PUBLIC_BASE_URL → x-forwarded-host/proto → host → req.url). */
+export function originOf(req: Request): string {
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  if (host && !/^0\.0\.0\.0/.test(host)) {
+    const proto = req.headers.get("x-forwarded-proto") || (/^(localhost|127\.)/.test(host) ? "http" : "https");
+    return `${proto.split(",")[0]}://${host.split(",")[0]}`;
+  }
+  return new URL(req.url).origin;
+}

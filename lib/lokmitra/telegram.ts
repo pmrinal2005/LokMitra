@@ -1,9 +1,65 @@
 import "server-only";
 import { cfg } from "./config";
 import { logRun } from "./store";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+/* ------------------------------------------------------------------ */
+/* Bot Simulator sink — when a simulation scope is active every Bot API */
+/* call is recorded and answered locally (no token, no network), so the */
+/* /bot-simulator page exercises the REAL bot.ts flows end-to-end.       */
+/* ------------------------------------------------------------------ */
+export interface SimCall {
+  method: string;
+  at: string;
+  text?: string;
+  keyboard?: InlineKb;
+  photo?: string | null;
+  caption?: string;
+  callback_text?: string;
+}
+const simStore = new AsyncLocalStorage<{ calls: SimCall[]; msgId: number; base?: string }>();
+export function withSimulator<T>(fn: () => Promise<T>, base?: string): Promise<{ result: T; calls: SimCall[] }> {
+  const ctx = { calls: [] as SimCall[], msgId: 1000, base };
+  return simStore.run(ctx, async () => ({ result: await fn(), calls: ctx.calls }));
+}
+export const inSimulator = () => !!simStore.getStore();
+/** Public base URL for links the bot sends: PUBLIC_BASE_URL (or Vercel URL), else the simulator's request origin. */
+export const botBaseUrl = () => cfg.publicBaseUrl() || simStore.getStore()?.base || "";
+
+async function simAnswer(method: string, body: Record<string, unknown> | FormData): Promise<unknown> {
+  const ctx = simStore.getStore()!;
+  const get = (k: string) => (body instanceof FormData ? (body.get(k) as unknown) : body[k]);
+  const at = new Date().toISOString();
+  if (method === "sendMessage") {
+    const rm = get("reply_markup") as { inline_keyboard?: InlineKb } | string | undefined;
+    const kb = typeof rm === "string" ? (JSON.parse(rm) as { inline_keyboard?: InlineKb }).inline_keyboard : rm?.inline_keyboard;
+    ctx.calls.push({ method, at, text: String(get("text") ?? ""), keyboard: kb });
+    return { message_id: ++ctx.msgId };
+  }
+  if (method === "sendPhoto") {
+    const rm = get("reply_markup");
+    const photo = get("photo");
+    let dataUrl: string | null = null;
+    if (photo instanceof Blob) dataUrl = `data:${photo.type || "image/jpeg"};base64,${Buffer.from(await photo.arrayBuffer()).toString("base64")}`;
+    ctx.calls.push({ method, at, caption: String(get("caption") ?? ""), photo: dataUrl, keyboard: typeof rm === "string" ? JSON.parse(rm).inline_keyboard : undefined });
+    return { message_id: ++ctx.msgId };
+  }
+  if (method === "answerCallbackQuery") {
+    ctx.calls.push({ method, at, callback_text: String(get("text") ?? "") });
+    return true;
+  }
+  if (method === "sendChatAction") {
+    ctx.calls.push({ method, at, text: String(get("action") ?? "typing") });
+    return true;
+  }
+  if (method === "getFile") throw new Error("voice notes are not available in the simulator — type your question");
+  ctx.calls.push({ method, at });
+  return true;
+}
 
 /** Thin Telegram Bot API client (no SDK). */
 export async function tg<T = unknown>(method: string, body: Record<string, unknown> | FormData, timeoutMs = 20_000): Promise<T> {
+  if (simStore.getStore()) return (await simAnswer(method, body)) as T;
   const token = cfg.telegramToken();
   if (!token) throw new Error("TELEGRAM_BOT_TOKEN not configured");
   const ctrl = new AbortController();
@@ -67,7 +123,7 @@ export async function tgSend(chatId: string | number, text: string, opts: { html
       throw e;
     });
   }
-  void logRun({ surface: "telegram", purpose: "send", meta: { parts: parts.length } });
+  void logRun({ surface: "telegram", purpose: inSimulator() ? "simulator_send" : "send", meta: { parts: parts.length } });
   return last;
 }
 
@@ -115,6 +171,7 @@ export async function setCommands() {
       { command: "lang", description: "Change language (e.g. /lang mr)" },
       { command: "state", description: "Set your state (e.g. /state MH)" },
       { command: "alerts", description: "Deadline & circular alerts" },
+      { command: "report", description: "My last Citizen Benefit Report" },
       { command: "email", description: "E-mail my last report" },
       { command: "help", description: "How to use LokMitra" },
     ],

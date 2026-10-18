@@ -6,7 +6,7 @@ import { buildReport, localizeReport, reportMarkdown, type SynthSection } from "
 import type { StructuredReport } from "./report-shape";
 import { langByCode } from "./languages";
 import { fetch_clean_markdown, rates, type FetchedPage } from "./ops";
-import { cacheState, getPortal, resolvePortal, type PortalRow } from "./portal";
+import { cacheState, getPortal, resolvePortal, upsertPortal, type PortalRow } from "./portal";
 import { estimateSteps, INFO_SCHEMA, PRICE_SCHEMA, schemeById, stateByCode, type SchemeDef } from "./schemes";
 import { getUser, logRun, rateLimit, sessions, upsertUser } from "./store";
 import { clip, hostOf, nowIso, redact, seal, uuid } from "./util";
@@ -236,7 +236,8 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   /* ---- one batched free Fetch for every public page (≤10 URLs per request) ---- */
   const freeOnes = resolved.filter((r) => !(r.sub.personal && (r.sub.task === "status" || r.sub.task === "land")));
   const urlPlan = new Map<string, string[]>();
-  for (const r of freeOnes) urlPlan.set(`${r.scheme.id}:${r.sub.task}`, (r.row?.deep_links ?? []).slice(0, 2).map((l) => l.url));
+  // up to 3 cached links per section (TinyFish Fetch batches ≤10 URLs per request; ops.ts splits larger sets)
+  for (const r of freeOnes) urlPlan.set(`${r.scheme.id}:${r.sub.task}`, (r.row?.deep_links ?? []).slice(0, 3).map((l) => l.url));
   const allUrls = [...new Set([...urlPlan.values()].flat())];
   let pages: FetchedPage[] = [];
   if (allUrls.length) {
@@ -271,6 +272,13 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     const urls = urlPlan.get(`${scheme.id}:${sub.task}`) ?? [];
     const ps = urls.map((u) => byUrl.get(u)).filter(Boolean) as FetchedPage[];
     pagesBySection.set(`${scheme.id}:${sub.task}`, ps.filter((p) => p.text).map((p) => ({ url: shownUrl(p), text: p.text })));
+    // self-healing cache: links that failed this time move to the back of portal_map.deep_links,
+    // so the next citizen's free Fetch reads the healthy official page first (no Agent spend).
+    const failed = new Set(ps.filter((p) => !p.text && p.error).map((p) => p.url));
+    if (failed.size && r.row && r.row.deep_links.length > failed.size) {
+      const healed = [...r.row.deep_links.filter((l) => !failed.has(l.url)), ...r.row.deep_links.filter((l) => failed.has(l.url))];
+      if (healed.map((l) => l.url).join() !== r.row.deep_links.map((l) => l.url).join()) void safe(upsertPortal({ state_code: r.row.state_code, scheme_id: r.row.scheme_id, task: r.row.task, entry_url: r.row.entry_url, deep_links: healed }), null);
+    }
     const { data, status } = await extractSection(scheme, sub, ps, intent);
     const sec: Section = { ...base, status, data, sources: ps.filter((p) => p.text).map((p) => shownUrl(p)).concat(ps.length ? [] : [scheme.entry]), excerpt_sources: ps.map((p) => ({ url: p.url, title: p.title, cached: p.cached, error: p.error })) };
     sections.push(sec);

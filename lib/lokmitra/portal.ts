@@ -177,6 +177,7 @@ export async function resolvePortal(
   const links = dedupeLinks([
     ...(task === "deadline" ? seedLinks(scheme, state, task).slice(0, 1) : []), // the scheme's own portal carries the notices
     ...(task === "price" ? priceLinks(state, ctx) : []),
+    ...(task === "info" ? seedLinks(scheme, state, task).slice(0, 1) : []), // registry page is known-good → always in the first Fetch batch
     ...ranked.map((h) => ({ url: h.url, label: h.title || hostOf(h.url), kind: (task === "price" ? "price" : task === "deadline" ? "notice" : task === "land" ? "land" : "info") as DeepLink["kind"] })),
     ...seedLinks(scheme, state, task),
   ]).slice(0, task === "price" ? 4 : 5);

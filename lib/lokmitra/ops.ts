@@ -148,6 +148,8 @@ export interface FetchedPage {
 
 const MAX_STORED_CHARS = 40_000;
 
+const FETCH_FAIL_TTL_MS = 30 * 60_000;
+
 export async function fetch_clean_markdown(
   urls: string[],
   opts: { purpose?: string; ttlSec?: number; links?: boolean; scheme_id?: string; state_code?: string; force?: boolean; maxChars?: number } = {},
@@ -160,6 +162,17 @@ export async function fetch_clean_markdown(
 
   for (const u of list) {
     const key = sha256(`fetch|${u}`);
+    // negative cache: a URL that just failed (unreachable / 403 / proxy error) is skipped for
+    // FETCH_FAIL_TTL so a dead government mirror does not add a 45 s timeout to every citizen.
+    if (!opts.force) {
+      const neg = await safe(db.one<Row>("content_cache", { eq: { key: sha256(`fetchfail|${u}`) } }), null);
+      if (neg && Date.now() - new Date(String(neg.fetched_at)).getTime() < FETCH_FAIL_TTL_MS) {
+        const old = await safe(db.one<Row>("content_cache", { eq: { key } }), null);
+        const b = (old?.body ?? {}) as { text?: string; final_url?: string };
+        out.set(u, old ? { url: u, final_url: b.final_url ?? u, title: (old.title as string) ?? null, language: null, text: b.text ?? "", cached: true, error: "recently unreachable; served stale cache" } : { url: u, final_url: null, title: null, language: null, text: "", cached: true, error: `${String((neg.body as { error?: string })?.error ?? "unreachable")} (skipped, retry after cool-down)` });
+        continue;
+      }
+    }
     const row = opts.force ? null : await safe(db.one<Row>("content_cache", { eq: { key } }), null);
     if (row && Date.now() - new Date(String(row.fetched_at)).getTime() < ttl * 1000) {
       const b = row.body as { text?: string; final_url?: string; links?: string[] };
@@ -192,6 +205,7 @@ export async function fetch_clean_markdown(
         );
       }
       for (const e of res.errors ?? []) {
+        void safe(db.insert("content_cache", { key: sha256(`fetchfail|${e.url}`), kind: "fetch", url: e.url, title: null, language: null, etag: null, last_modified: null, body: { error: e.error }, fetched_at: nowIso(), hits: 0 }, { onConflict: "key" }), []);
         const old = stale.get(e.url);
         if (old) {
           const b = old.body as { text?: string; final_url?: string };

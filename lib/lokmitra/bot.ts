@@ -1,7 +1,10 @@
 import "server-only";
 import { cfg } from "./config";
 import { runConfirmed, type FlowEvent } from "./agentflow";
-import { reportEmailHtml, sendEmail } from "./email";
+import { sendEmail } from "./email";
+import { L } from "./glossary";
+import { buildReportPayload, structuredOf } from "./report-payload";
+import { reportToMarkdown } from "./report-shape";
 import { transcribe } from "./groq";
 import { langByCode, LANGUAGES } from "./languages";
 import { ask, getReport, type AskResult } from "./pipeline";
@@ -9,7 +12,7 @@ import { relayAct, relayCancel, relaySave, startRelay, type RelayView } from "./
 import { schemeById, SCHEMES, stateByCode, STATES } from "./schemes";
 import { ensureSentinel, listSentinels, subscribe } from "./sentinel";
 import { getUser, sessions, upsertUser } from "./store";
-import { tgAnswer, tgFile, tgPhoto, tgSend, tgTyping, type InlineKb } from "./telegram";
+import { botBaseUrl, inSimulator, mdToTg, tgAnswer, tgFile, tgPhoto, tgSend, tgTyping, type InlineKb } from "./telegram";
 import { clip, mask } from "./util";
 
 /**
@@ -24,7 +27,7 @@ interface TgUpdate {
 }
 
 interface TgState extends Record<string, unknown> {
-  mode: "idle" | "collect" | "relay";
+  mode: "idle" | "collect" | "relay" | "email";
   confirm_id?: string;
   pending?: { key: string; label: string }[];
   values?: Record<string, string>;
@@ -45,6 +48,39 @@ const QUICK: InlineKb = [
   [{ text: "📋 Schemes for me", callback_data: "q:schemes" }, { text: "💰 Mandi bhaav", callback_data: "q:mandi" }],
   [{ text: "🎓 Scholarship", callback_data: "q:nsp" }, { text: "🗺 Land record", callback_data: "q:land" }],
 ];
+/** Language picker — priority rollout first (2 per row), then the rest of the 22 scheduled languages. */
+function langKeyboard(): InlineKb {
+  const pri = LANGUAGES.filter((l) => l.priority || l.code === "en");
+  const rest = LANGUAGES.filter((l) => !l.priority && l.code !== "en");
+  const rows: InlineKb = [];
+  const btn = (l: (typeof LANGUAGES)[number]) => ({ text: `${l.native}${l.native !== l.name ? ` · ${l.name}` : ""}`, callback_data: `lg:${l.code}` });
+  for (let i = 0; i < pri.length; i += 2) rows.push(pri.slice(i, i + 2).map(btn));
+  for (let i = 0; i < rest.length; i += 3) rows.push(rest.slice(i, i + 3).map((l) => ({ text: l.native, callback_data: `lg:${l.code}` })));
+  return rows;
+}
+/** State picker — 4 codes per row, paged (Telegram keeps keyboards compact on low-end phones). */
+const STATE_PAGE = 16;
+function stateKeyboard(page = 0): InlineKb {
+  const list = STATES.filter((x) => x.code !== "IN");
+  const slice = list.slice(page * STATE_PAGE, (page + 1) * STATE_PAGE);
+  const rows: InlineKb = [];
+  for (let i = 0; i < slice.length; i += 4) rows.push(slice.slice(i, i + 4).map((x) => ({ text: `${x.code} · ${x.name.length > 11 ? `${x.name.slice(0, 10)}…` : x.name}`, callback_data: `st:${x.code}` })));
+  const nav: InlineKb[number] = [];
+  if (page > 0) nav.push({ text: "◀ Prev", callback_data: `sp:${page - 1}` });
+  if ((page + 1) * STATE_PAGE < list.length) nav.push({ text: "More ▶", callback_data: `sp:${page + 1}` });
+  nav.push({ text: "🇮🇳 All-India", callback_data: "st:IN" });
+  rows.push(nav);
+  return rows;
+}
+const SETUP_KB: InlineKb = [[{ text: "🌐 Language / भाषा", callback_data: "m:lang" }, { text: "📍 My state / राज्य", callback_data: "m:state" }]];
+/** Buttons under every Citizen Benefit Report. */
+function reportKb(reportId: string): InlineKb {
+  const kb: InlineKb = [[{ text: "🔔 Deadline alerts", callback_data: "m:alerts" }, { text: "📧 E-mail report", callback_data: `em:${reportId.slice(0, 36)}` }]];
+  const base = botBaseUrl();
+  if (base) kb.push([{ text: "🖨 Printable slip + QR", url: `${base}/report/${reportId}` }]);
+  return kb;
+}
+
 const QUICK_TEXT: Record<string, string> = {
   pmkisan: "Mera PM-KISAN status check karna hai",
   ayushman: "Kya main Ayushman Bharat ke liye eligible hoon?",
@@ -58,7 +94,7 @@ const HELP = `<b>LokMitra 🙏</b> — your free sarkari-yojana helper.
 • Type or send a <b>voice note</b> in any Indian language.
 • Ask about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records, mandi prices…
 • Personal status checks need your consent — I always show the cost first and never submit anything.
-Commands: /lang hi|mr|ta|te|bn|gu… · /state MH · /alerts · /email you@example.com · /help`;
+Commands: /lang · /state · /alerts · /report · /email you@example.com · /help`;
 
 export async function handleUpdate(u: TgUpdate) {
   if (u.callback_query) return onCallback(u.callback_query);
@@ -84,6 +120,11 @@ export async function handleUpdate(u: TgUpdate) {
   const st = await getState(chat);
   if (st.mode === "collect" && st.pending?.length) return onCollect(chat, userId, st, text);
   if (st.mode === "relay" && st.relay_id) return onRelayText(chat, userId, st, text);
+  if (st.mode === "email") {
+    await setState(chat, { mode: "idle" }, userId);
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return emailReport(chat, userId, text, st.values?.report_id);
+    if (/^(cancel|no|nahi|x)$/i.test(text)) return tgSend(chat, "👍 OK.");
+  }
 
   return runAsk(chat, userId, text, user.language);
 }
@@ -99,42 +140,39 @@ async function onCommand(chat: string, userId: string, text: string, lang: strin
   switch (cmd.replace(/@.*$/, "").toLowerCase()) {
     case "/start":
       await upsertUser({ id: userId, channel: "telegram", consent_at: new Date().toISOString() });
-      return tgSend(chat, HELP, { html: true, keyboard: QUICK });
+      await tgSend(chat, HELP, { html: true, keyboard: QUICK });
+      return tgSend(chat, "First, choose your language and state so answers are local to you:", { keyboard: SETUP_KB });
     case "/help":
-      return tgSend(chat, HELP, { html: true, keyboard: QUICK });
+      return tgSend(chat, HELP, { html: true, keyboard: [...QUICK, ...SETUP_KB] });
     case "/lang": {
-      const l = LANGUAGES.find((x) => x.code === arg.toLowerCase() || x.name.toLowerCase() === arg.toLowerCase());
-      if (!l) return tgSend(chat, `Languages: ${LANGUAGES.map((x) => `${x.code}=${x.native}`).join(", ")}\nExample: /lang mr`);
-      await upsertUser({ id: userId, channel: "telegram", language: l.code });
-      return tgSend(chat, `✅ ${l.native} (${l.name})`);
+      const l = arg ? LANGUAGES.find((x) => x.code === arg.toLowerCase() || x.name.toLowerCase() === arg.toLowerCase()) : null;
+      if (!l) return tgSend(chat, "🌐 Choose your language / अपनी भाषा चुनें:", { keyboard: langKeyboard() });
+      return setLang(chat, userId, l.code);
     }
     case "/state": {
-      const s = STATES.find((x) => x.code === arg.toUpperCase() || x.name.toLowerCase() === arg.toLowerCase());
-      if (!s) return tgSend(chat, `States: ${STATES.map((x) => x.code).join(" ")}\nExample: /state MH`);
-      await upsertUser({ id: userId, channel: "telegram", state_code: s.code });
-      return tgSend(chat, `✅ ${s.name} (${s.hindi})`);
+      const s = arg ? STATES.find((x) => x.code === arg.toUpperCase() || x.name.toLowerCase() === arg.toLowerCase()) : null;
+      if (!s) return tgSend(chat, "📍 Choose your state / अपना राज्य चुनें:", { keyboard: stateKeyboard(0) });
+      return setStateCode(chat, userId, s.code);
     }
+    case "/report":
+      return sendLastReport(chat, userId);
     case "/email": {
+      if (!arg) {
+        const u = await getUser(userId);
+        if (u?.email) return emailReport(chat, userId, u.email);
+        await setState(chat, { mode: "email", values: {} }, userId);
+        return tgSend(chat, "📧 Send the e-mail address for your Citizen Benefit Report (or 'cancel').");
+      }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(arg)) return tgSend(chat, "Usage: /email you@example.com — I will e-mail your last Citizen Benefit Report.");
-      await upsertUser({ id: userId, channel: "telegram", email: arg });
-      const chatS = await sessions.get<{ report_id?: string }>(`chat_${userId}`.slice(0, 128));
-      const rep = chatS?.data.report_id ? ((await getReport(chatS.data.report_id)) as Record<string, unknown> | null) : null;
-      if (!rep) return tgSend(chat, "✅ E-mail saved. Ask a question first, then send /email again.");
-      const r = await sendEmail({ to: arg, subject: "LokMitra · Citizen Benefit Report", html: reportEmailHtml({ summary_local: String(rep.summary_local ?? ""), summary_en: String(rep.summary_en ?? ""), language: String(rep.language ?? "en"), sources: (rep.sources as string[]) ?? [], report_id: String(rep.id), link: cfg.publicBaseUrl() ? `${cfg.publicBaseUrl()}/report/${rep.id}` : undefined }) });
-      return tgSend(chat, r.id ? `📧 Sent to ${arg}` : `⚠ E-mail failed: ${r.error}`);
+      return emailReport(chat, userId, arg);
     }
-    case "/alerts": {
-      const sent = await listSentinels();
-      const user = await getUser(userId);
-      const mine = sent.filter((s) => s.state_code === "IN" || s.state_code === user?.state_code).slice(0, 8);
-      const kb: InlineKb = mine.map((s) => [{ text: `🔔 ${schemeById(s.scheme_id)?.name ?? s.scheme_id} · ${s.state_code} · ${s.kind}`, callback_data: `sub:${s.monitor_id}`.slice(0, 64) }]);
-      kb.push([{ text: "➕ PMFBY deadline (my state)", callback_data: `mk:pmfby:deadline` }], [{ text: "➕ NSP scholarship deadline", callback_data: `mk:nsp:deadline` }]);
-      return tgSend(chat, mine.length ? "Choose alerts to subscribe:" : "No sentinels yet in your state — create one:", { keyboard: kb });
-    }
+    case "/alerts":
+      return sendAlerts(chat, userId);
     default:
       return tgSend(chat, HELP, { html: true, keyboard: QUICK });
   }
   void lang;
+  void inSimulator;
 }
 
 async function runAsk(chat: string, userId: string, text: string, lang: string) {
@@ -151,8 +189,58 @@ async function runAsk(chat: string, userId: string, text: string, lang: string) 
   const kb: InlineKb = [];
   for (const s of res.sections) if (s.confirm) kb.push([{ text: `✅ Check my ${s.scheme_name} (~${s.confirm.est_steps} steps ≈ $${s.confirm.est_cost_usd})`, callback_data: `cf:${s.confirm.confirm_id}`.slice(0, 64) }]);
   if (kb.length) kb.push([{ text: "❌ Not now", callback_data: "cx" }]);
-  if (cfg.publicBaseUrl()) kb.push([{ text: "🖨 Printable slip + QR", url: `${cfg.publicBaseUrl()}/report/${res.report_id}` }]);
-  await tgSend(chat, (await import("./telegram")).mdToTg(res.summary_local) + footer, { html: true, keyboard: kb.length ? kb : undefined });
+  kb.push(...reportKb(res.report_id));
+  await tgSend(chat, mdToTg(res.summary_local) + footer, { html: true, keyboard: kb });
+}
+
+/* ---------------- settings / report / alerts / e-mail helpers ---------------- */
+
+async function setLang(chat: string, userId: string, code: string) {
+  const l = langByCode(code);
+  await upsertUser({ id: userId, channel: "telegram", language: l.code });
+  const u = await getUser(userId);
+  return tgSend(chat, `✅ ${l.native} (${l.name}) · ${L("title", l.code)}`, { keyboard: u?.state_code ? QUICK : [[{ text: "📍 Now choose your state", callback_data: "m:state" }]] });
+}
+
+async function setStateCode(chat: string, userId: string, code: string) {
+  const s = stateByCode(code);
+  await upsertUser({ id: userId, channel: "telegram", state_code: s.code === "IN" ? null : s.code });
+  return tgSend(chat, `✅ ${s.name}${s.hindi ? ` (${s.hindi})` : ""}. Answers and alerts will use this state's portals.`, { keyboard: [...QUICK, [{ text: "🔔 Alerts for my state", callback_data: "m:alerts" }]] });
+}
+
+async function lastReport(userId: string) {
+  const chatS = await sessions.get<{ report_id?: string }>(`chat_${userId}`.slice(0, 128));
+  return chatS?.data.report_id ? ((await getReport(chatS.data.report_id)) as Record<string, unknown> | null) : null;
+}
+
+async function sendLastReport(chat: string, userId: string) {
+  const rep = await lastReport(userId);
+  if (!rep) return tgSend(chat, "No report yet — ask me a question first (e.g. “PM-KISAN status aur gehu ka bhaav”).", { keyboard: QUICK });
+  const lang = String(rep.language ?? "hi");
+  const st = structuredOf(rep);
+  const md = st ? reportToMarkdown(st, lang, { local: lang !== "en", maxSources: 4 }) : String(rep.summary_local ?? rep.summary_en ?? "");
+  const when = new Date(String(rep.created_at ?? Date.now())).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  return tgSend(chat, `<b>📄 ${L("title", lang)}</b> · #${String(rep.id).slice(0, 8)} · ${when} IST\n\n${mdToTg(md)}`, { html: true, keyboard: reportKb(String(rep.id)) });
+}
+
+async function sendAlerts(chat: string, userId: string) {
+  const sent = await listSentinels();
+  const user = await getUser(userId);
+  const mine = sent.filter((s) => s.state_code === "IN" || s.state_code === user?.state_code).slice(0, 8);
+  const kb: InlineKb = mine.map((s) => [{ text: `🔔 ${schemeById(s.scheme_id)?.name ?? s.scheme_id} · ${s.state_code} · ${s.kind}`, callback_data: `sub:${s.monitor_id}`.slice(0, 64) }]);
+  kb.push([{ text: "➕ PMFBY deadline (my state)", callback_data: `mk:pmfby:deadline` }], [{ text: "➕ NSP scholarship deadline", callback_data: `mk:nsp:deadline` }]);
+  if (!user?.state_code) kb.push([{ text: "📍 Set my state first", callback_data: "m:state" }]);
+  return tgSend(chat, mine.length ? "Choose alerts to subscribe (Monitor checks the official page on a schedule — no Agent cost):" : "No sentinels yet in your state — create one:", { keyboard: kb });
+}
+
+async function emailReport(chat: string, userId: string, to: string, reportId?: string) {
+  await upsertUser({ id: userId, channel: "telegram", email: to });
+  const rep = reportId ? ((await getReport(reportId)) as Record<string, unknown> | null) : await lastReport(userId);
+  if (!rep) return tgSend(chat, "✅ E-mail saved. Ask a question first, then tap 📧 E-mail report.");
+  const p = await buildReportPayload(rep, { base: botBaseUrl() || undefined });
+  if (!cfg.resendKey()) return tgSend(chat, `⚠ E-mail is not configured on this LokMitra server (RESEND_API_KEY missing).${p.link.startsWith("http") ? `\nOpen / print your report instead: ${p.link}` : ""}`);
+  const r = await sendEmail({ to, subject: p.subject, html: p.html, text: p.text });
+  return tgSend(chat, r.id ? `📧 Sent your ${L("title", p.language)} to ${to}` : `⚠ E-mail failed: ${r.error}`);
 }
 
 async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
@@ -163,6 +251,19 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
   if (data.startsWith("q:")) {
     const user = await getUser(userId);
     return runAsk(chat, userId, QUICK_TEXT[data.slice(2)] ?? "schemes for me", user?.language ?? "hi");
+  }
+  if (data === "m:lang") return tgSend(chat, "🌐 Choose your language / अपनी भाषा चुनें:", { keyboard: langKeyboard() });
+  if (data === "m:state") return tgSend(chat, "📍 Choose your state / अपना राज्य चुनें:", { keyboard: stateKeyboard(0) });
+  if (data === "m:alerts") return sendAlerts(chat, userId);
+  if (data.startsWith("lg:")) return setLang(chat, userId, data.slice(3));
+  if (data.startsWith("st:")) return setStateCode(chat, userId, data.slice(3));
+  if (data.startsWith("sp:")) return tgSend(chat, "📍 Choose your state:", { keyboard: stateKeyboard(Math.max(0, Number(data.slice(3)) || 0)) });
+  if (data.startsWith("em:")) {
+    const rid = data.slice(3);
+    const u = await getUser(userId);
+    if (u?.email) return emailReport(chat, userId, u.email, rid);
+    await setState(chat, { mode: "email", values: { report_id: rid } }, userId);
+    return tgSend(chat, "📧 Send the e-mail address for this report (or 'cancel').");
   }
   if (data === "cx") {
     await setState(chat, { mode: "idle" }, userId);

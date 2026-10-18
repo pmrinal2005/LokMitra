@@ -141,6 +141,7 @@ export function Settings() {
             <button className="btn sm" disabled={!!act.busy} onClick={tgStatus}>Bot status</button>
             <button className="btn sm" disabled={!!act.busy || !d?.integrations.telegram} onClick={tgSetup}>Register webhook</button>
             <button className="btn sm" disabled={!!act.busy} onClick={runCron}>Run nightly prefetch now</button>
+            <a className="btn sm" href="/bot-simulator">🤖 Bot Simulator (no token needed)</a>
           </div>
           {d?.endpoints && (
             <div className="stack" style={{ gap: 4, marginTop: 10 }}>
