@@ -20,7 +20,7 @@
 <br/>
 
 **📦 Repository** · [`github.com/pmrinal2005/LokMitra`](https://github.com/pmrinal2005/LokMitra)
-**🚀 Hosting** · Vercel (one Next.js project: UI + API routes + SSE + Telegram webhook + cron)
+**🚀 Hosting** · [`https://lokmitrabymrinal.vercel.app/`](https://lokmitrabymrinal.vercel.app/)
 
 ---
 
