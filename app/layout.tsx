@@ -1,11 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import "./globals.css";
-import { AppShell } from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "LokMitra — Universal Multilingual Citizen Web Sahayak (× TinyFish)",
+  title: "LokMitra | Every Government Benefit, In Your Own Language",
   description:
-    "A living command deck that watches TinyFish web agents swim through India's government web infrastructure in real time — wallet telemetry, live execution mix, live agent reasoning and a porthole into the agent's browser.",
+    "LokMitra finds every scheme you deserve, checks your status on official portals and explains it simply in your own language. Free for every citizen on Telegram, web and at your CSC.",
   icons: { icon: "/favicon.svg" },
   manifest: "/manifest.webmanifest",
   applicationName: "LokMitra",
@@ -20,6 +18,11 @@ export const viewport: Viewport = {
 /** Runs before paint: restores Calm Mode (or honours prefers-reduced-motion) without a flash. */
 const calmBoot = `try{var c=localStorage.getItem('lm-calm');if(c==='1'||(c===null&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)){document.documentElement.classList.add('calm')}}catch(e){}`;
 
+/**
+ * Root shell shared by the landing page ("/") and the command deck ("/dashboard" and
+ * every tool route under app/(deck)). Deck-only styles + sidebar live in app/(deck)/layout.tsx
+ * so the landing page renders with its own cinematic stylesheet and no app chrome.
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -39,10 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap"
         />
       </head>
-      <body>
-        <div className="abyss-layer" aria-hidden="true" />
-        <AppShell>{children}</AppShell>
-      </body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

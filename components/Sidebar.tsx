@@ -43,7 +43,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Operate",
     items: [
-      { href: "/", label: "Mission Deck", icon: svg(I.deck) },
+      { href: "/dashboard", label: "Mission Deck", icon: svg(I.deck) },
       { href: "/live", label: "Live Browser", icon: svg(I.live), badge: { text: "$", paid: true } },
       { href: "/sentinel", label: "Sentinel", icon: svg(I.bell), badge: { text: "monitor" } },
       { href: "/sessions", label: "Sessions", icon: svg(I.key) },
@@ -117,11 +117,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className={`shell ${collapsed ? "collapsed" : ""} ${drawer ? "drawer-open" : ""}`}>
       <aside className="sidebar" aria-label="LokMitra navigation">
         <div className="sb-brand">
-          <Logomark />
-          <div className="brand-word">
-            LokMitra
-            <small>citizen web sahayak</small>
-          </div>
+          <a href="/" title="Back to the LokMitra home page" aria-label="LokMitra home" style={{ display: "contents", color: "inherit" }}>
+            <Logomark />
+            <div className="brand-word">
+              LokMitra
+              <small>citizen web sahayak</small>
+            </div>
+          </a>
           <button className="icon-btn sb-toggle desktop-only" onClick={toggle} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} title={collapsed ? "Expand" : "Collapse"}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
               {collapsed ? <path d="M9 6l6 6-6 6" /> : <path d="M15 6l-6 6 6 6" />}
@@ -133,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div key={g.title} className="stack" style={{ gap: 3 }}>
               <div className="sb-section">{g.title}</div>
               {g.items.filter((it) => !it.operatorOnly || isOperator).map((it) => {
-                const active = it.href === "/" ? path === "/" : path.startsWith(it.href);
+                const active = path === it.href || path.startsWith(it.href + "/");
                 return (
                   <Link key={it.href} href={it.href} className="sb-link" aria-current={active ? "page" : undefined} title={it.label}>
                     {it.icon}
