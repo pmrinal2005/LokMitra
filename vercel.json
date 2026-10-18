@@ -5,7 +5,7 @@
   "buildCommand": "npm run build",
   "regions": ["bom1"],
   "crons": [
-    { "path": "/api/cron/prefetch", "schedule": "0 21 * * *" }
+    { "path": "/api/cron/maintenance", "schedule": "0 21 * * *" }
   ],
   "headers": [
     {

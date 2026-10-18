@@ -15,7 +15,7 @@ import { PrintButton } from "./PrintButton";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Citizen Benefit Report — LokMitra", robots: { index: false } };
 
-interface Sec { scheme_id: string; scheme_name: string; task: string; status: string; sources?: string[]; diy?: string[]; cache?: string }
+interface Sec { scheme_id: string; scheme_name: string; task: string; status: string; sources?: string[]; diy?: string[] }
 interface AgentRes { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; at?: string }
 
 /**

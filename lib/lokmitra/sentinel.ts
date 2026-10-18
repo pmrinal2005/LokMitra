@@ -3,11 +3,12 @@ import { tf, type TfMonitor } from "../tinyfish";
 import { cfg } from "./config";
 import { db, safe, type Row } from "./db";
 import { extractFromMarkdown, translate } from "./groq";
-import { create_monitor, rates, run_monitor_now } from "./ops";
+import { create_monitor, fetch_clean_markdown, rates, run_monitor_now, search_schemes } from "./ops";
+import { usefulText } from "./extract";
 import { resolvePortalLive } from "./portal";
 import { schemeById, stateByCode } from "./schemes";
 import { logRun } from "./store";
-import { clip, hostOf, nowIso, sha256 } from "./util";
+import { clip, hostOf, isGovHost, nowIso, sha256, uniq } from "./util";
 import { sendEmail } from "./email";
 import { tgSend } from "./telegram";
 import { factCheck, type FactResult } from "./facts";
@@ -54,6 +55,36 @@ export async function getSentinel(monitorId: string) {
   return (await safe(db.one<Row>("sentinels", { eq: { monitor_id: monitorId } }), null)) as unknown as SentinelRow | null;
 }
 
+/**
+ * Choose the page a Page Monitor should watch — LIVE, at registration time (nothing reused later).
+ * Many portals are JS shells for Fetch (e.g. myScheme returns only its footer), which would leave the
+ * compliance fact-check with nothing to check. So: live portal Search (+ a gov-only guideline Search for
+ * compliance) → one batched live Fetch of the candidates → first page with real content, preferring
+ * pages on which the deterministic fact-check actually finds the guideline facts.
+ */
+export async function pickLiveTarget(schemeId: string, kind: SentinelKind, state: string): Promise<{ url: string; ranked: string[]; probed: { url: string; chars: number; facts: number; error?: string | null }[] }> {
+  const scheme = schemeById(schemeId)!;
+  const r = await resolvePortalLive(scheme.id, kind === "deadline" ? "deadline" : "info", { state });
+  const extra =
+    kind === "compliance"
+      ? (await search_schemes(`${scheme.name} operational guidelines benefit eligibility official`, { purpose: `Official guideline page for ${scheme.name} (compliance sentinel)`, scheme_id: scheme.id, state_code: state })).hits
+          .filter((h) => isGovHost(h.url))
+          .map((h) => h.url)
+      : [];
+  const candidates = uniq([...r.portal.deep_links.map((l) => l.url), ...extra, ...scheme.infoLinks, scheme.entry]).slice(0, 10);
+  const pages = await fetch_clean_markdown(candidates, { purpose: `LokMitra sentinel target probe for ${scheme.name} (${kind})`, scheme_id: scheme.id, state_code: state });
+  const probed = candidates.map((u) => {
+    const p = pages.find((x) => x.url === u);
+    const text = p?.text ?? "";
+    const facts = text ? factCheck(scheme.id, text, u).filter((f) => f.status !== "not_stated").length : 0;
+    return { url: u, chars: text.length, facts, useful: usefulText(text), error: p?.error ?? null };
+  });
+  const withFacts = kind === "compliance" ? probed.filter((p) => p.useful && p.facts > 0).sort((a, b) => b.facts - a.facts) : [];
+  const ranked = uniq([...withFacts.map((p) => p.url), ...probed.filter((p) => p.useful).map((p) => p.url)]);
+  const fallback = r.portal.deep_links[0]?.url ?? scheme.entry;
+  return { url: ranked[0] ?? fallback, ranked: ranked.length ? ranked.slice(0, 3) : [fallback], probed: probed.map(({ useful: _u, ...x }) => x) };
+}
+
 /** Register (or return the existing) Monitor for scheme × state × kind. */
 export async function ensureSentinel(opts: { scheme_id: string; state_code?: string | null; kind: SentinelKind; schedule_cron?: string; target?: string }): Promise<{ sentinel: SentinelRow; created: boolean; baseline?: unknown }> {
   const scheme = schemeById(opts.scheme_id);
@@ -68,6 +99,7 @@ export async function ensureSentinel(opts: { scheme_id: string; state_code?: str
   let config: Record<string, unknown>;
   let target: string;
   let purpose: string;
+  let candidates: string[] = [];
   if (opts.kind === "circular") {
     type = "search";
     target = opts.target || `${scheme.name} new circular OR notification OR guidelines ${st.code === "IN" ? "" : st.name} ${new Date().getFullYear()}`.replace(/\s+/g, " ").trim();
@@ -75,12 +107,8 @@ export async function ensureSentinel(opts: { scheme_id: string; state_code?: str
     purpose = `A new official circular, GR, notification or guideline PDF is published for ${scheme.name}${st.code === "IN" ? "" : ` in ${st.name}`}.`;
   } else {
     type = "fetch";
-    if (opts.target) target = opts.target;
-    else {
-      // target page located with a LIVE TinyFish Search at registration time
-      const r = await resolvePortalLive(scheme.id, opts.kind === "deadline" ? "deadline" : "info", { state });
-      target = r.portal.deep_links[0]?.url ?? scheme.entry;
-    }
+    candidates = opts.target ? [opts.target] : (await pickLiveTarget(scheme.id, opts.kind, state)).ranked;
+    target = candidates[0];
     config = { url: target, format: "markdown" };
     purpose =
       opts.kind === "deadline"
@@ -90,7 +118,28 @@ export async function ensureSentinel(opts: { scheme_id: string; state_code?: str
   const body: Parameters<typeof create_monitor>[0] = { type, name: `LokMitra · ${scheme.name} · ${st.code} · ${opts.kind}`.slice(0, 100), config, schedule_cron: cron, purpose };
   const hook = hookUrl();
   if (hook) body.webhook_url = hook;
-  const res = await create_monitor(body);
+  // The Monitor's own baseline fetch can fail where the probe succeeded (e.g. target_unreachable on a
+  // large PDF) — either as an error or as status "failed". Never keep a dead watcher: delete it and
+  // fall through to the next live-ranked page.
+  const queue = candidates.length ? candidates : [target];
+  let res: Awaited<ReturnType<typeof create_monitor>> | null = null;
+  let lastErr: unknown = null;
+  for (const url of queue) {
+    target = url;
+    if (type === "fetch") body.config = { url, format: "markdown" };
+    try {
+      res = await create_monitor(body);
+    } catch (e) {
+      lastErr = e;
+      res = null;
+      continue;
+    }
+    if (res.monitor.status !== "failed") break;
+    await tf("agent", `/v1/monitors/${res.monitor.id}`, { method: "DELETE", timeoutMs: 20_000 }).catch(() => null);
+    lastErr = new Error(`monitor baseline failed for ${url}`);
+    res = null;
+  }
+  if (!res) throw lastErr instanceof Error ? lastErr : new Error("monitor create failed");
   const row: SentinelRow = { monitor_id: res.monitor.id, monitor_type: type, scheme_id: scheme.id, state_code: state, kind: opts.kind, target, schedule_cron: cron, purpose, last_run_at: nowIso(), last_change: null, created_at: nowIso() };
   await db.insert("sentinels", row as unknown as Row, { onConflict: "monitor_id" });
   const base = (res.run ?? {}) as PagePayload;

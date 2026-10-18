@@ -352,14 +352,14 @@ export function LivingMap({ nodes, activeCount }: { nodes: NodeStat[]; activeCou
           const st = stats.get(n.id);
           const vol = st?.volume ?? 0;
           const r = vol ? 3 + Math.sqrt(vol / maxVol) * 7 : 2.2;
-          const cls = !vol ? "dormant" : st!.active > 0 ? "active" : st!.hits >= st!.misses ? "hit" : "miss";
+          const cls = !vol ? "dormant" : st!.active > 0 ? "active" : st!.agentic > 0 ? "miss" : "hit";
           return (
             <g
               key={n.id}
               className={`node ${cls}`}
               tabIndex={0}
               role="button"
-              aria-label={`${n.name}: ${vol} queries${st ? `, ${st.hits} cache hits, ${st.misses} agent runs` : ""}`}
+              aria-label={`${n.name}: ${vol} queries${st ? `, ${st.open_web} live Search/Fetch calls, ${st.agentic} live agent runs` : ""}`}
               onMouseEnter={(e) => {
                 const box = stageRef.current!.getBoundingClientRect();
                 const tb = (e.currentTarget as SVGGElement).getBoundingClientRect();
@@ -395,13 +395,13 @@ export function LivingMap({ nodes, activeCount }: { nodes: NodeStat[]; activeCou
               </div>
               <div style={{ fontSize: 12, color: "var(--pearl)", margin: "2px 0 6px" }}>{hs.top_label ?? "—"}</div>
               <div className="row">
-                <span>Cache status</span>
-                <b style={{ color: hs.hits >= hs.misses ? "var(--jade)" : "var(--ember)" }}>{hs.hits >= hs.misses ? "HIT" : "MISS → AGENT"}</b>
+                <span>Execution</span>
+                <b style={{ color: hs.agentic ? "var(--ember)" : "var(--jade)" }}>{hs.agentic ? "LIVE · AGENT" : "LIVE · SEARCH/FETCH"}</b>
               </div>
               <div className="row">
-                <span>Free hits · Agent runs</span>
+                <span>Search/Fetch · Agent runs</span>
                 <b>
-                  {hs.hits} · {hs.misses}
+                  {hs.open_web} · {hs.agentic}
                 </b>
               </div>
               <div className="row">
@@ -433,17 +433,17 @@ export function LivingMap({ nodes, activeCount }: { nodes: NodeStat[]; activeCou
         <div className="depth-ticks">
           <span>surge · live agent</span>
           <span>bright · high volume</span>
-          <span>glow · cached reef</span>
+          <span>glow · live search / fetch</span>
           <span>dim · dormant</span>
         </div>
       </div>
       <div className="map-legend-inline" aria-hidden="true">
         <span>
-          cache hit (free)
+          live search / fetch
           <i style={{ background: "var(--teal)", boxShadow: "0 0 8px var(--teal)" }} />
         </span>
         <span>
-          agent discovery (paid)
+          live agent run
           <i style={{ background: "var(--ember)", boxShadow: "0 0 8px var(--ember)" }} />
         </span>
         <span>

@@ -16,6 +16,7 @@ const I = {
   csc: <path d="M3 10h18M5 10v9h14v-9M3 10l2-5h14l2 5M9 19v-5h6v5" />,
   judge: <path d="M12 3v18M5 7h14M5 7l-3 7a3 3 0 0 0 6 0L5 7zM19 7l-3 7a3 3 0 0 0 6 0l-3-7zM8 21h8" />,
   bot: <path d="M5 9h14v9H5zM12 5v4M9 13h.01M15 13h.01M9 16h6M3 12v3M21 12v3" />,
+  doc: <path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 15h7M9 18h4" />,
   chart: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   gear: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />,
 };
@@ -31,7 +32,8 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { href: "/sahayak", label: "Sahayak", icon: svg(I.chat), badge: { text: "22 langs" } },
       { href: "/csc", label: "CSC Desk", icon: svg(I.csc), badge: { text: "slip+QR" } },
-      { href: "/portal-map", label: "Portal Map", icon: svg(I.map), badge: { text: "cache" } },
+      { href: "/portal-map", label: "Portal Explorer", icon: svg(I.map), badge: { text: "live" } },
+      { href: "/reports", label: "Benefit Reports", icon: svg(I.doc), badge: { text: "email" } },
       { href: "/bot-simulator", label: "Bot Simulator", icon: svg(I.bot), badge: { text: "telegram" } },
     ],
   },
@@ -71,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname() || "/";
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState(false);
-  const [wallet, setWallet] = useState<{ bal: string | null; spend: number | null; budget: number | null }>({ bal: null, spend: null, budget: null });
+  const [wallet, setWallet] = useState<{ bal: string | null; spend: number | null }>({ bal: null, spend: null });
 
   useEffect(() => {
     try {
@@ -85,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const r = await fetch("/api/lokmitra/stats", { cache: "no-store" });
         const j = await r.json();
-        if (alive && r.ok) setWallet({ bal: j.wallet?.balance === null || j.wallet?.balance === undefined ? null : Number(j.wallet.balance).toFixed(3), spend: j.spend_usd ?? null, budget: j.budget_usd ?? null });
+        if (alive && r.ok) setWallet({ bal: j.wallet?.balance === null || j.wallet?.balance === undefined ? null : Number(j.wallet.balance).toFixed(3), spend: j.spend_usd ?? null });
       } catch {}
     };
     load();
@@ -143,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b>
           </span>
           <span className="sb-foot-text">
-            spent <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> / ${wallet.budget ?? 5}
+            used <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> · no cap
           </span>
         </div>
       </aside>

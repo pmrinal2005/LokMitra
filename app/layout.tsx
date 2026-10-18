@@ -5,7 +5,7 @@ import { AppShell } from "@/components/Sidebar";
 export const metadata: Metadata = {
   title: "LokMitra — Universal Multilingual Citizen Web Sahayak (× TinyFish)",
   description:
-    "A living command deck that watches TinyFish web agents swim through India's government web infrastructure in real time — wallet telemetry, cache intelligence, live agent reasoning and a porthole into the agent's browser.",
+    "A living command deck that watches TinyFish web agents swim through India's government web infrastructure in real time — wallet telemetry, live execution mix, live agent reasoning and a porthole into the agent's browser.",
   icons: { icon: "/favicon.svg" },
   manifest: "/manifest.webmanifest",
   applicationName: "LokMitra",

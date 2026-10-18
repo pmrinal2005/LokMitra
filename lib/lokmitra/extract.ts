@@ -74,6 +74,11 @@ export function parsePriceTable(md: string, commodity?: string | null, fallbackM
 
 const KEY_RE = /eligib|not eligible|exclu|benefit|₹|rs\.?\s?\d|lakh|instal|document|apply|registration|last date|deadline|helpline|toll.?free|ekyc|aadhaar|premium|cover|pension|scholarship|पात्र|लाभ|दस्तावेज|अंतिम/gi;
 
+/** Portal footer / helpdesk / contact noise (e.g. myScheme's "support-myscheme[at]digitalindia[dot]gov[dot]in (011) 2430…"). */
+export function isBoilerplate(s: string): boolean {
+  return /\[at\]|\[dot\]|@[a-z0-9-]+\.(gov|nic|in|com)|\(0\d{2,4}\)\s*\d|helpdesk|contact us|last updated|visitor(s)? count|screen reader|skip to (main )?content|terms (and|&) conditions|privacy policy|website (is )?(designed|developed|hosted)|content owned/i.test(s);
+}
+
 /** Pick the most informative sentences (eligibility / benefit / documents / deadline) in reading order. */
 export function highlights(md: string, max = 5, extra?: RegExp): string[] {
   const text = String(md ?? "")
@@ -85,7 +90,7 @@ export function highlights(md: string, max = 5, extra?: RegExp): string[] {
   const raw = text
     .split(/\n+|(?<=[.?!।])\s+(?=[A-Z0-9(])/)
     .map((s) => s.replace(/^[#>*\-\s\d.)]+/, "").trim())
-    .filter((s) => s.length >= 40 && s.length <= 320 && !s.includes("|") && !/^source\b/i.test(s) && !/cookie|sign out|javascript|copyright|©|all rights reserved|retrieved \d|^↑|^\^/i.test(s));
+    .filter((s) => s.length >= 40 && s.length <= 320 && !s.includes("|") && !/^source\b/i.test(s) && !/cookie|sign out|javascript|copyright|©|all rights reserved|retrieved \d|^↑|^\^/i.test(s) && !isBoilerplate(s));
   const seen = new Set<string>();
   const scored = raw
     .map((s, i) => {

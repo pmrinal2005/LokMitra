@@ -90,7 +90,7 @@ await check("GET /api/deck/overview (aggregator)", async () => {
   need(b.configured === true, "configured=false");
   const errs = Object.keys(b.errors || {});
   need(errs.length === 0, `upstream errors: ${errs.map((k) => `${k}=${b.errors[k].message}`).join("; ")}`);
-  return `${b.nodes.length} reefs · ${b.cache.free_pct}% free · ${b.ticker.length} ticker items`;
+  return `${b.nodes.length} reefs · ${b.live.open_web_pct}% live search/fetch · 0% cached · ${b.ticker.length} ticker items`;
 });
 if (PAID) {
   await check("POST /api/tinyfish/agent/run-sse (PAID)", async () => {

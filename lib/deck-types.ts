@@ -9,8 +9,8 @@ export interface ApiErr {
 export interface NodeStat {
   id: string;
   volume: number;
-  hits: number;
-  misses: number;
+  open_web: number; // live Search + Fetch calls touching this state
+  agentic: number; // live Agent runs touching this state
   active: number;
   last_updated: string | null;
   spark: number[];
@@ -57,14 +57,15 @@ export interface DeckOverview {
   errors: Record<string, ApiErr>;
   wallet: WalletShape | null;
   runs: { total: number; active: number; completed: number; failed: number; cancelled: number; steps: number; recent: RecentRun[] };
-  usage: { search: number; fetch: number; browser_sessions: number; browser_minutes: number; search_cached: number };
+  usage: { search: number; fetch: number; browser_sessions: number; browser_minutes: number };
   monitors: { total: number; active: number; items: { id: string; name: string | null; type: string; status: string; schedule_cron: string }[] };
-  cache: { free_calls: number; paid_calls: number; free_pct: number };
+  /** live execution mix — every call is live, nothing is cached */
+  live: { open_web_calls: number; agent_calls: number; open_web_pct: number };
   nodes: NodeStat[];
   sectors: { id: SectorId; served: number; states: number }[];
   ticker: TickerItem[];
+  /** informational only — there is no budget cap */
   spend_estimate_usd: number | null;
-  budget_usd: number;
 }
 
 /** Terminal line model (client) */

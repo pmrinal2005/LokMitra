@@ -9,7 +9,7 @@ import { safeEqual } from "./util";
  * - If ADMIN_TOKEN is unset the deck runs in open demo mode (every action allowed).
  * - Otherwise send `x-admin-token: <token>` (Settings page stores it in localStorage).
  * Citizen flows (ask / confirm / relay) are NOT admin-gated: they are protected by the
- * per-user rate limit, the confirmation gate and the wallet guard instead.
+ * per-user rate limit and the explicit citizen confirmation gate instead.
  */
 export function isAdmin(req: Request): boolean {
   const t = cfg.adminToken();

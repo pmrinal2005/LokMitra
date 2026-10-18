@@ -29,10 +29,10 @@ export function MobileTop3({ nodes }: { nodes: NodeStat[] }) {
       <div className="top3" aria-live="polite">
         {top.map((n, k) => (
           <div key={n.id} className={`top3-card ${k === i ? "on" : ""}`} aria-hidden={k !== i}>
-            <span className={`tag ${n.active ? "teal" : n.hits >= n.misses ? "jade" : "amber"}`}>#{k + 1} · {n.active ? "agent swimming" : n.hits >= n.misses ? "cache hit" : "agent discovery"}</span>
+            <span className={`tag ${n.active ? "teal" : !n.agentic ? "jade" : "amber"}`}>#{k + 1} · {n.active ? "agent swimming" : !n.agentic ? "live search / fetch" : "live agent"}</span>
             <h4>{stateName(n.id)}</h4>
             <span className="panel-sub">
-              {n.volume} queries · {n.hits} free · {n.misses} agent
+              {n.volume} queries · {n.open_web} search/fetch · {n.agentic} agent
             </span>
             <span style={{ fontSize: 13, color: "var(--pearl)" }}>{n.top_label ?? ""}</span>
           </div>

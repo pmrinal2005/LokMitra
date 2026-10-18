@@ -3,8 +3,8 @@ import { useMemo, useState } from "react";
 import { api, ago, hostOf } from "@/lib/client";
 import { Flash, Json, Kpi, PageHead, Panel, useAction, useApi, usd } from "@/components/ui";
 
-interface Log { id: string; surface: string; purpose: string; state_code?: string | null; scheme_id?: string | null; run_id?: string | null; status: string; cache?: string | null; steps?: number | null; cost_usd: number; latency_ms?: number | null; meta?: Record<string, unknown>; created_at: string }
-interface Rep { id: string; language: string; query: string; cache_hits: number; cache_misses: number; cost_usd: number; created_at: string }
+interface Log { id: string; surface: string; purpose: string; state_code?: string | null; scheme_id?: string | null; run_id?: string | null; status: string; steps?: number | null; cost_usd: number; latency_ms?: number | null; meta?: Record<string, unknown>; created_at: string }
+interface Rep { id: string; language: string; query: string; live_calls?: { search?: number; fetch_urls?: number; fetch_ok?: number; agent?: number } | null; elapsed_ms?: number | null; cost_usd: number; created_at: string }
 interface TfRun { run_id: string; status: string; goal: string; created_at: string; finished_at: string | null; num_of_steps: number | null; result: Record<string, unknown> | null; error: { message: string; category?: string } | null; streaming_url?: string | null; steps?: { id: string; action: string | null; status: string; timestamp: string; screenshot: string | null; duration: string | null }[] }
 
 const SURFACES = ["", "search", "fetch", "agent", "browser", "monitor", "llm", "telegram", "email"];
@@ -27,7 +27,7 @@ export function Runs() {
     return {
       free: all.filter((r) => r.surface === "search" || r.surface === "fetch").length,
       paid: all.reduce((a, r) => a + Number(r.cost_usd ?? 0), 0),
-      hits: all.filter((r) => r.cache === "hit").length,
+      agentic: all.filter((r) => r.surface === "agent" || r.surface === "browser" || r.surface === "monitor").length,
       errors: all.filter((r) => r.status === "error").length,
     };
   }, [logs.data]);
@@ -46,9 +46,9 @@ export function Runs() {
       </PageHead>
 
       <div className="grid-4">
-        <Kpi label="free calls (Search + Fetch)" value={sum.free} tone="jade" />
-        <Kpi label="cache hits" value={sum.hits} sub="served without any upstream call" tone="teal" />
-        <Kpi label="logged spend" value={usd(sum.paid)} tone="amber" />
+        <Kpi label="live Search + Fetch calls" value={sum.free} tone="jade" />
+        <Kpi label="live Agent / Browser / Monitor" value={sum.agentic} sub="every call is live · nothing cached" tone="teal" />
+        <Kpi label="logged usage (informational)" value={usd(sum.paid)} sub="no budget cap" tone="amber" />
         <Kpi label="errors" value={sum.errors} />
       </div>
       <Flash {...act} />
@@ -72,7 +72,7 @@ export function Runs() {
           ) : (
             <div className="table-wrap" style={{ maxHeight: 620 }}>
               <table className="tbl">
-                <thead><tr><th>When</th><th>Surface</th><th>Purpose</th><th>Scheme</th><th>State</th><th>Cache</th><th>Steps</th><th>Cost</th><th>Latency</th><th>Status</th><th>Run</th></tr></thead>
+                <thead><tr><th>When</th><th>Surface</th><th>Purpose</th><th>Scheme</th><th>State</th><th>Steps</th><th>Cost</th><th>Latency</th><th>Status</th><th>Run</th></tr></thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id} title={JSON.stringify(r.meta ?? {})}>
@@ -81,7 +81,6 @@ export function Runs() {
                       <td>{r.purpose}</td>
                       <td className="mono">{r.scheme_id ?? "—"}</td>
                       <td className="mono">{r.state_code ?? "—"}</td>
-                      <td className="mono">{r.cache ?? "—"}</td>
                       <td className="mono">{r.steps ?? "—"}</td>
                       <td className="mono">{Number(r.cost_usd) ? usd(r.cost_usd) : "$0"}</td>
                       <td className="mono">{r.latency_ms ? `${r.latency_ms}ms` : "—"}</td>
@@ -134,14 +133,15 @@ export function Runs() {
           ) : (
             <div className="table-wrap">
               <table className="tbl">
-                <thead><tr><th>When</th><th>Lang</th><th>Query</th><th>Cache</th><th>Cost</th><th /></tr></thead>
+                <thead><tr><th>When</th><th>Lang</th><th>Query</th><th>Live calls</th><th>Time</th><th>Cost</th><th /></tr></thead>
                 <tbody>
                   {logs.data.reports.map((r) => (
                     <tr key={r.id}>
                       <td className="mono">{ago(r.created_at)}</td>
                       <td className="mono">{r.language}</td>
                       <td><span className="ellipsis" style={{ maxWidth: 520 }}>{r.query}</span></td>
-                      <td className="mono">{r.cache_hits}/{r.cache_hits + r.cache_misses}</td>
+                      <td className="mono">{r.live_calls ? `${r.live_calls.search ?? 0}S · ${r.live_calls.fetch_ok ?? 0}/${r.live_calls.fetch_urls ?? 0}F${r.live_calls.agent ? ` · ${r.live_calls.agent}A` : ""}` : "—"}</td>
+                      <td className="mono">{r.elapsed_ms ? `${(r.elapsed_ms / 1000).toFixed(1)}s` : "—"}</td>
                       <td className="mono">{Number(r.cost_usd) ? usd(r.cost_usd) : "$0"}</td>
                       <td><a className="btn sm" href={`/report/${r.id}`} target="_blank" rel="noreferrer">Slip ↗</a></td>
                     </tr>

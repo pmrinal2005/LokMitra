@@ -7,7 +7,7 @@ export const maxDuration = 300;
 
 /**
  * GET /api/lokmitra/judge/stream — SSE telemetry for the Judge Console.
- * `tick` events every ~4 s (wallet, spend, cache ratio, live Agent run + streaming_url).
+ * `tick` events every ~4 s (wallet, informational usage, live calls per surface, live Agent run + streaming_url).
  * The stream closes itself after ~280 s (Vercel function limit); EventSource reconnects automatically.
  */
 export async function GET(req: Request) {

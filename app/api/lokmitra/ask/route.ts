@@ -9,8 +9,9 @@ export const maxDuration = 300;
 
 /**
  * POST /api/lokmitra/ask  { text, user_id?, language?, state_code?, district?, identifiers?, channel? }
- * Intent → portal_map cache → batched FREE Fetch → extraction → confirm gate → synthesis → localisation.
- * Streams SSE (`Accept: text/event-stream` or ?stream=1): stage · intent · cache · fetch · section ·
+ * Intent → LIVE Search (portal) → LIVE batched Fetch → extraction → confirm gate → synthesis → localisation.
+ * Nothing is cached: two identical questions run two independent, complete live pipelines.
+ * Streams SSE (`Accept: text/event-stream` or ?stream=1): stage · intent · search · fetch · section ·
  * confirm_required · report · result · done. Otherwise returns the final JSON.
  */
 export async function POST(req: Request) {

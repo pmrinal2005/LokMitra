@@ -52,7 +52,7 @@ function clip(s: string, n = 64) {
  * GET /api/deck/overview
  * Fan-out aggregator: calls 6 live TinyFish endpoints in parallel
  * (wallet, runs, search usage, fetch usage, browser usage, monitors) and
- * folds them into the deck's visual model (map nodes, sectors, cache ring, ticker).
+ * folds them into the deck's visual model (map nodes, sectors, live-execution ring, ticker).
  */
 export async function GET() {
   const now = Date.now();
@@ -63,14 +63,13 @@ export async function GET() {
       errors: { config: { code: "TINYFISH_API_KEY_MISSING", message: "Set TINYFISH_API_KEY in your environment.", status: 503 } },
       wallet: null,
       runs: { total: 0, active: 0, completed: 0, failed: 0, cancelled: 0, steps: 0, recent: [] },
-      usage: { search: 0, fetch: 0, browser_sessions: 0, browser_minutes: 0, search_cached: 0 },
+      usage: { search: 0, fetch: 0, browser_sessions: 0, browser_minutes: 0 },
       monitors: { total: 0, active: 0, items: [] },
-      cache: { free_calls: 0, paid_calls: 0, free_pct: 0 },
+      live: { open_web_calls: 0, agent_calls: 0, open_web_pct: 0 },
       nodes: [],
       sectors: SECTORS.map((s) => ({ id: s.id, served: 0, states: 0 })),
       ticker: [],
       spend_estimate_usd: null,
-      budget_usd: Number(process.env.DECK_BUDGET_USD || 5),
     });
   }
 
@@ -102,7 +101,7 @@ export async function GET() {
   const getNode = (id: string) => {
     let n = nodeMap.get(id);
     if (!n) {
-      n = { id, volume: 0, hits: 0, misses: 0, active: 0, last_updated: null, spark: Array(SPARK_BUCKETS).fill(0), top_label: null, hosts: [] };
+      n = { id, volume: 0, open_web: 0, agentic: 0, active: 0, last_updated: null, spark: Array(SPARK_BUCKETS).fill(0), top_label: null, hosts: [] };
       nodeMap.set(id, n);
     }
     return n;
@@ -110,12 +109,12 @@ export async function GET() {
   const sectorAgg = new Map<SectorId, { served: number; states: Set<string> }>();
   SECTORS.forEach((s) => sectorAgg.set(s.id, { served: 0, states: new Set() }));
 
-  const touch = (text: string, at: string | null, kind: "hit" | "miss", label: string, url?: string | null, active = false) => {
+  const touch = (text: string, at: string | null, kind: "open_web" | "agentic", label: string, url?: string | null, active = false) => {
     const stateId = classifyState(text);
     const n = getNode(stateId);
     n.volume += 1;
-    if (kind === "hit") n.hits += 1;
-    else n.misses += 1;
+    if (kind === "open_web") n.open_web += 1;
+    else n.agentic += 1;
     if (active) n.active += 1;
     if (at) {
       if (!n.last_updated || at > n.last_updated) {
@@ -137,10 +136,10 @@ export async function GET() {
   };
 
   for (const r of runList) {
-    touch(`${r.goal}`, r.created_at, "miss", clip(r.goal, 48), null, r.status === "RUNNING" || r.status === "PENDING");
+    touch(`${r.goal}`, r.created_at, "agentic", clip(r.goal, 48), null, r.status === "RUNNING" || r.status === "PENDING");
   }
-  for (const s of searchItems) touch(s.query, s.created_at, "hit", clip(s.query, 48));
-  for (const f of fetchItems) touch(`${f.url} ${f.title ?? ""}`, f.created_at, "hit", clip(f.title || hostOf(f.url) || f.url, 48), f.url);
+  for (const s of searchItems) touch(s.query, s.created_at, "open_web", clip(s.query, 48));
+  for (const f of fetchItems) touch(`${f.url} ${f.title ?? ""}`, f.created_at, "open_web", clip(f.title || hostOf(f.url) || f.url, 48), f.url);
 
   const nodes = STATE_NODES.map((s) => nodeMap.get(s.id)).filter(Boolean) as NodeStat[];
 
@@ -162,7 +161,7 @@ export async function GET() {
     sector: classifySector(r.goal),
   }));
 
-  /* ---------- usage + cache ---------- */
+  /* ---------- usage + live execution mix ---------- */
   const searchTotal = searchU.ok ? searchU.value.total ?? searchItems.length : 0;
   const fetchTotal = fetchU.ok ? fetchU.value.total ?? fetchItems.length : 0;
   const browserMinutes = browserItems.reduce((a, b) => a + (b.duration_ms ?? 0), 0) / 60000;
@@ -196,10 +195,10 @@ export async function GET() {
     else if (r.status === "FAILED") ticker.push({ kind: "fail", icon: "⚠", text: `Retry queued: ${clip(r.goal, 60)}`, state: where, sector: sec, at: r.created_at });
   }
   for (const s of searchItems.slice(0, 8))
-    ticker.push({ kind: "free", icon: "🔎", text: `“${clip(s.query, 48)}” → ${s.result_count} results served free`, state: classifyState(s.query), sector: classifySector(s.query), at: s.created_at });
+    ticker.push({ kind: "free", icon: "🔎", text: `“${clip(s.query, 48)}” → ${s.result_count} results, live`, state: classifyState(s.query), sector: classifySector(s.query), at: s.created_at });
   for (const f of fetchItems.slice(0, 8))
     if (f.status === "completed")
-      ticker.push({ kind: "free", icon: "📄", text: `${clip(f.title || hostOf(f.url), 44)} fetched${f.latency_ms ? ` in ${Math.round(f.latency_ms)}ms` : ""}${f.language ? ` · ${f.language}` : ""}`, state: classifyState(f.url), sector: classifySector(`${f.url} ${f.title}`), at: f.created_at });
+      ticker.push({ kind: "free", icon: "📄", text: `${clip(f.title || hostOf(f.url), 44)} fetched live${f.latency_ms ? ` in ${Math.round(f.latency_ms)}ms` : ""}${f.language ? ` · ${f.language}` : ""}`, state: classifyState(f.url), sector: classifySector(`${f.url} ${f.title}`), at: f.created_at });
   ticker.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
 
   const body: DeckOverview = {
@@ -221,19 +220,17 @@ export async function GET() {
       fetch: fetchTotal,
       browser_sessions: browserU.ok ? browserU.value.total ?? browserItems.length : 0,
       browser_minutes: Math.round(browserMinutes * 10) / 10,
-      search_cached: searchItems.filter((s) => s.cached).length,
     },
     monitors: {
       total: monitorItems.length,
       active: monitorItems.filter((m) => m.status === "active").length,
       items: monitorItems.slice(0, 10).map((m) => ({ id: m.id, name: m.name ?? null, type: m.type, status: m.status, schedule_cron: m.schedule_cron })),
     },
-    cache: { free_calls: free, paid_calls: paid, free_pct: freePct },
+    live: { open_web_calls: free, agent_calls: paid, open_web_pct: freePct },
     nodes,
     sectors: SECTORS.map((s) => ({ id: s.id, served: sectorAgg.get(s.id)!.served, states: sectorAgg.get(s.id)!.states.size })),
     ticker: ticker.slice(0, 24),
     spend_estimate_usd: spend,
-    budget_usd: Number(process.env.DECK_BUDGET_USD || 5),
   };
   return ok(body);
 }

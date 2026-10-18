@@ -12,7 +12,7 @@ export function json<T>(data: T, status = 200) {
 export function err(e: unknown, fallbackStatus = 500) {
   if (e instanceof TinyFishError) return NextResponse.json({ error: { code: e.code, message: e.message, upstream: e.details ?? null } }, { status: e.status, headers: NS });
   const status = typeof (e as { status?: unknown })?.status === "number" ? (e as { status: number }).status : fallbackStatus;
-  return NextResponse.json({ error: { code: status === 429 ? "RATE_LIMITED" : status === 410 ? "EXPIRED" : status === 400 ? "BAD_REQUEST" : "INTERNAL_ERROR", message: e instanceof Error ? e.message : String(e) } }, { status, headers: NS });
+  return NextResponse.json({ error: { code: status === 429 ? "RATE_LIMITED" : status === 410 ? "EXPIRED" : status === 400 ? "BAD_REQUEST" : status === 404 ? "NOT_FOUND" : status === 503 ? "NOT_CONFIGURED" : status === 502 ? "UPSTREAM_ERROR" : "INTERNAL_ERROR", message: e instanceof Error ? e.message : String(e) } }, { status, headers: NS });
 }
 
 export function bad(message: string) {

@@ -4,7 +4,7 @@ import { GlassNav } from "./GlassNav";
 import { LivingMap } from "./LivingMap";
 import { MobileTop3 } from "./MobileTop3";
 import { WalletGauge } from "./WalletGauge";
-import { CacheRing } from "./CacheRing";
+import { LiveRing } from "./LiveRing";
 import { AgentTerminal } from "./AgentTerminal";
 import { Porthole } from "./Porthole";
 import { SectorTiles } from "./SectorTiles";
@@ -86,15 +86,15 @@ export function CommandDeck() {
           <WalletGauge data={data} />
         </section>
 
-        {/* ---------------- CACHE RING ---------------- */}
+        {/* ---------------- LIVE EXECUTION RING ---------------- */}
         <section className="panel area-ring breathe" style={{ ["--i" as string]: 3, ["--bob" as string]: "5.8s" }} aria-labelledby="ring-title">
           <header className="panel-head">
             <h2 className="panel-title" id="ring-title">
-              <span className="glyph" style={{ background: "var(--jade)", boxShadow: "0 0 10px var(--jade)" }} /> Cache Intelligence
+              <span className="glyph" style={{ background: "var(--jade)", boxShadow: "0 0 10px var(--jade)" }} /> Live Execution
             </h2>
-            <span className="panel-sub">search · fetch · runs usage</span>
+            <span className="panel-sub">every call live · 0% cached</span>
           </header>
-          <CacheRing data={data} />
+          <LiveRing data={data} />
         </section>
 
         {/* ---------------- TERMINAL ---------------- */}

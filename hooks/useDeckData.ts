@@ -72,7 +72,7 @@ function diffAndEmit(a: DeckOverview | null, b: DeckOverview) {
     if (terminal && was && was !== r.status) bus.emit("fish", { type: "end", id: r.run_id, ok: r.status === "COMPLETED" });
     if (terminal && !was) bus.emit("fish", { type: "swim", id: `t-${r.run_id}`, target: r.state, color: r.status === "COMPLETED" ? "#6EF2A0" : "#FF5C7A" });
   }
-  const dFree = b.cache.free_calls - a.cache.free_calls;
+  const dFree = b.live.open_web_calls - a.live.open_web_calls;
   if (dFree > 0) {
     bus.emit("spark", { count: Math.min(dFree, 5) });
     const hot = [...b.nodes].sort((x, y) => (y.last_updated ?? "").localeCompare(x.last_updated ?? ""))[0];

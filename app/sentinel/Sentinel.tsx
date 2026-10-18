@@ -12,7 +12,7 @@ interface Registry { schemes: { id: string; name: string; state_specific: boolea
 const KINDS = [
   { id: "deadline", label: "Deadline page", hint: "Page Monitor on the scheme's deadline / enrolment page — alerts when dates change." },
   { id: "circular", label: "New circulars / GRs", hint: "Topic Monitor (Search) for new notices, circulars and guideline PDFs." },
-  { id: "compliance", label: "Compliance sentinel", hint: "Page Monitor whose diff is checked against cached guideline facts to flag guideline-vs-portal contradictions." },
+  { id: "compliance", label: "Compliance sentinel", hint: "Page Monitor whose diff is checked against the canonical guideline facts (static registry, not a cache) to flag guideline-vs-portal contradictions." },
 ];
 const CRONS = [
   { v: "CRON_TZ=Asia/Kolkata 0 8 * * 1", l: "Weekly · Mon 08:00 IST" },
@@ -94,7 +94,7 @@ export function Sentinel() {
           </label>
           <label className="span-2">
             <span className="label">{form.kind === "circular" ? "Custom query (optional)" : "Custom page URL (optional)"}</span>
-            <input className="input" placeholder={form.kind === "circular" ? "auto: “<scheme> new circular notification <state>”" : "auto: best deadline / guideline page from portal_map"} value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
+            <input className="input" placeholder={form.kind === "circular" ? "auto: “<scheme> new circular notification <state>”" : "auto: official deadline / guideline page located by a live Search"} value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
           </label>
         </div>
         <div className="row" style={{ marginTop: 12 }}>

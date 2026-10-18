@@ -331,7 +331,7 @@ button { font: inherit; color: inherit; }
 .odo-static { display: inline-block; }
 
 /* ==========================================================================
-   CACHE RING
+   LIVE EXECUTION RING
    ========================================================================== */
 .ring-body { display: grid; grid-template-columns: 210px 1fr; gap: 18px; align-items: center; }
 .ring-wrap { position: relative; width: 210px; height: 210px; }

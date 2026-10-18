@@ -19,7 +19,8 @@ export async function GET(req: Request) {
 /**
  * POST { state_code, user_id?, email?, schedule_cron? } (operator) — registers the Monitor starter pack:
  * PMFBY deadline (state) · NSP deadline · PM-KISAN + Ayushman compliance (deterministic fact-check) · PM-KISAN circulars.
- * Existing (scheme × state × kind) monitors are reused, so re-running costs $0.
+ * One Monitor per (scheme × state × kind): re-running returns the already-registered watcher instead of duplicating it
+ * (a Monitor is a live, scheduled watcher — not a cache; each scheduled run re-fetches the official page live).
  */
 export async function POST(req: Request) {
   const deny = requireAdmin(req);

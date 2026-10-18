@@ -8,7 +8,7 @@ interface S {
   database: { ok: boolean; backend: string; error?: string } & Record<string, unknown>;
   wallet: { balance: string | null; error: string | null; rates: { step: number; browserPerMin: number; monitor: number; source: string }; raw_meters: { label: string; unit_amount: string; per?: string }[] };
   upstreams: Record<string, string>;
-  guards: Record<string, number>;
+  execution: Record<string, string | number>;
   models: Record<string, string>;
   endpoints: Record<string, string> | null;
   sentinel_cron: string;
@@ -20,7 +20,7 @@ interface Health { ok: boolean; tinyfish_configured: boolean; upstreams: Record<
 const INT: { k: string; label: string; env: string; need: string }[] = [
   { k: "tinyfish", label: "TinyFish (Search · Fetch · Agent · Browser · Monitor)", env: "TINYFISH_API_KEY", need: "required" },
   { k: "groq", label: "Groq LLM (intent · synthesis · translation)", env: "GROQ_API_KEY", need: "recommended — heuristic fallback otherwise" },
-  { k: "supabase", label: "Supabase Postgres (portal_map cache, logs, sessions)", env: "SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY", need: "recommended — in-memory store resets per instance" },
+  { k: "supabase", label: "Supabase Postgres (reports, audit log, sessions, sentinels — no cache)", env: "SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY", need: "recommended — in-memory store resets per instance" },
   { k: "telegram", label: "Telegram bot", env: "TELEGRAM_BOT_TOKEN (+ TELEGRAM_WEBHOOK_SECRET)", need: "optional channel" },
   { k: "resend", label: "Resend e-mail", env: "RESEND_API_KEY (+ RESEND_FROM)", need: "optional channel" },
   { k: "admin_token", label: "Operator token", env: "ADMIN_TOKEN", need: "recommended in production (paid actions)" },
@@ -47,7 +47,7 @@ export function Settings() {
   };
   const tgStatus = () => act.run("Reading Telegram bot + webhook", () => api<Record<string, unknown>>("/api/telegram/setup"), (r) => void setTg(r));
   const tgSetup = () => act.run("Registering Telegram webhook + commands", () => api<Record<string, unknown>>("/api/telegram/setup", { body: {} }), (r) => (setTg(r), "webhook registered"));
-  const runCron = () => act.run("Running nightly prefetch now (free Fetch warm-up + purge)", () => api<Record<string, unknown>>("/api/cron/prefetch", { method: "POST" }), (r) => (setCron(r), "prefetch finished"));
+  const runCron = () => act.run("Running nightly maintenance now (purge expired sessions + OTP profiles)", () => api<Record<string, unknown>>("/api/cron/maintenance", { method: "POST" }), (r) => (setCron(r), "maintenance finished"));
 
   /** In-browser live probe of the free + read-only TinyFish endpoints through this deployment. */
   const probe = async () => {
@@ -74,7 +74,7 @@ export function Settings() {
   const d = s.data;
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Integration health (no secret values are ever returned), cost guards, operator token, Telegram webhook, cron and a live endpoint probe.">
+      <PageHead title="Settings" sub="Integration health (no secret values are ever returned), execution guards, operator token, Telegram webhook, cron and a live endpoint probe.">
         {d && <span className={`chip ${d.admin.you_are_admin ? "hit" : "miss"}`}>{d.admin.required ? (d.admin.you_are_admin ? "operator ✓" : "operator token needed") : "open demo mode"}</span>}
       </PageHead>
       <Flash {...act} />
@@ -103,7 +103,7 @@ export function Settings() {
           </div>
         </Panel>
 
-        <Panel title="Wallet & live rates" sub="GET /v1/wallet — the rates below drive every cost estimate and guard.">
+        <Panel title="Wallet & live rates" sub="GET /v1/wallet — live rates, used only for informational cost display (no budget cap).">
           <div className="stack" style={{ gap: 6 }}>
             <div className="pf-field"><span className="k">balance</span><b>{d?.wallet.balance ? `$${Number(d.wallet.balance).toFixed(3)}` : d?.wallet.error ?? "—"}</b></div>
             <div className="pf-field"><span className="k">agent step</span><b>${d?.wallet.rates.step ?? "—"}</b></div>
@@ -114,9 +114,9 @@ export function Settings() {
           </div>
         </Panel>
 
-        <Panel title="Cost & safety guards">
+        <Panel title="Execution & safety guards" sub="Every query runs fully live. No cache, no spend ceiling — only privacy / abuse guards.">
           <div className="stack" style={{ gap: 6 }}>
-            {d && Object.entries(d.guards).map(([k, v]) => <div key={k} className="pf-field"><span className="k">{k.replace(/_/g, " ")}</span><b>{String(v)}</b></div>)}
+            {d && Object.entries(d.execution ?? {}).map(([k, v]) => <div key={k} className="pf-field"><span className="k">{k.replace(/_/g, " ")}</span><b>{String(v)}</b></div>)}
             <div className="pf-field"><span className="k">sentinel default cron</span><b className="mono">{d?.sentinel_cron}</b></div>
           </div>
         </Panel>
@@ -140,7 +140,7 @@ export function Settings() {
           <div className="row">
             <button className="btn sm" disabled={!!act.busy} onClick={tgStatus}>Bot status</button>
             <button className="btn sm" disabled={!!act.busy || !d?.integrations.telegram} onClick={tgSetup}>Register webhook</button>
-            <button className="btn sm" disabled={!!act.busy} onClick={runCron}>Run nightly prefetch now</button>
+            <button className="btn sm" disabled={!!act.busy} onClick={runCron}>Run nightly maintenance now</button>
             <a className="btn sm" href="/bot-simulator">🤖 Bot Simulator (no token needed)</a>
           </div>
           {d?.endpoints && (

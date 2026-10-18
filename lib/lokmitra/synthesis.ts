@@ -9,6 +9,7 @@ import { listSentinels } from "./sentinel";
 import { fetch_clean_markdown } from "./ops";
 import { schemeById } from "./schemes";
 import { clip, hostOf } from "./util";
+import { isBoilerplate } from "./extract";
 import { reportToMarkdown, type Contradiction, type KeyFact, type NextStep, type ReportItem, type SentinelFact, type StructuredReport } from "./report-shape";
 
 /**
@@ -43,7 +44,7 @@ function keyFacts(s: SynthSection): KeyFact[] {
   }
   const benefit = str(d.benefit) || s.benefit || "";
   if (benefit) out.push({ key: "benefit", value: clip(benefit, 220) });
-  const elig = arr(d.eligibility);
+  const elig = arr(d.eligibility).filter((e) => !isBoilerplate(e));
   if (elig.length) out.push({ key: "eligibility", value: clip(elig.slice(0, 3).join("; "), 260) });
   const docs = arr(d.documents_required);
   if (docs.length) out.push({ key: "documents", value: clip(docs.slice(0, 5).join(", "), 200) });
@@ -51,7 +52,7 @@ function keyFacts(s: SynthSection): KeyFact[] {
   if (deadline) out.push({ key: "deadline", value: clip(`${deadline}${d.latest_notice_date ? ` (${str(d.latest_notice_date)})` : ""}`, 200) });
   if (d.what_changed) out.push({ key: "status", value: clip(str(d.what_changed), 220) });
   if (d.helpline) out.push({ key: "helpline", value: clip(str(d.helpline), 80) });
-  if (!elig.length && d.excerpt && s.status !== "error") out.push({ key: "eligibility", value: clip(str(d.excerpt).replace(/\s+/g, " "), 260) });
+  if (!elig.length && d.excerpt && s.status !== "error" && !isBoilerplate(str(d.excerpt))) out.push({ key: "eligibility", value: clip(str(d.excerpt).replace(/\s+/g, " "), 260) });
   return out;
 }
 

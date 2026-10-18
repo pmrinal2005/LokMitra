@@ -139,7 +139,7 @@ export function Judge() {
               <circle cx="70" cy="70" r={R} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="10" />
               <circle cx="70" cy="70" r={R} fill="none" stroke="var(--jade)" strokeWidth="10" strokeDasharray={`${webArc} ${C}`} transform="rotate(-90 70 70)" strokeLinecap="round" />
               <circle cx="70" cy="70" r="40" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="7" />
-              <circle cx="70" cy="70" r="40" fill="none" stroke="var(--amber)" strokeWidth="7" strokeDasharray={`${agentArc} ${2 * Math.PI * 40}`} transform="rotate(-90 70 70)" strokeLinecap="round" />
+              <circle cx="70" cy="70" r="40" fill="none" stroke="var(--ember)" strokeWidth="7" strokeDasharray={`${agentArc} ${2 * Math.PI * 40}`} transform="rotate(-90 70 70)" strokeLinecap="round" />
               <text x="70" y="68" textAnchor="middle" fill="var(--pearl)" fontSize="22" fontWeight="700">{L?.calls ?? 0}</text>
               <text x="70" y="86" textAnchor="middle" fill="var(--fog)" fontSize="9">live calls</text>
             </svg>

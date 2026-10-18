@@ -43,19 +43,17 @@ function lerpColor(a: string, b: string, t: number) {
 
 export function WalletGauge({ data }: { data: DeckOverview | null }) {
   const wallet = data?.wallet ?? null;
-  const budget = data?.budget_usd ?? 5;
   const balance = wallet ? Number(wallet.available_balance) : null;
   const spend = data?.spend_estimate_usd ?? null;
 
-  // Level = balance relative to the gauge scale (max of budget and balance so it never overflows)
-  const scale = Math.max(budget, balance ?? 0, 0.01);
+  // Level = balance relative to the gauge scale. Purely informational — there is NO budget ceiling.
+  const scale = Math.max(10, Math.ceil(balance ?? 0), 0.01);
   const level = balance === null ? 0 : Math.max(0, Math.min(1, balance / scale));
-  // Danger rises as the balance drains below 40% of the budget ceiling → graceful teal→coral morph
-  const danger = balance === null ? 0 : Math.max(0, Math.min(1, (budget * 0.4 - balance) / (budget * 0.4)));
+  // Colour shifts only when the wallet is nearly empty (top-up hint) — behaviour is never throttled.
+  const danger = balance === null ? 0 : Math.max(0, Math.min(1, (1 - balance) / 1));
   const cTop = lerpColor("#4FD9FF", "#FF5C7A", danger);
   const cBot = lerpColor("#2EF2C3", "#FF8F6B", danger);
   const surfaceY = BOT - (BOT - TOP) * level;
-  const ceilingY = BOT - (BOT - TOP) * Math.min(1, budget / scale);
 
   const meters = wallet?.rates?.meters ?? [];
   const rateOf = (re: RegExp) => meters.find((m) => re.test(m.label));
@@ -107,9 +105,8 @@ export function WalletGauge({ data }: { data: DeckOverview | null }) {
           {Array.from({ length: 9 }, (_, i) => (
             <line key={i} x1="92" x2={i % 2 ? 97 : 101} y1={TOP + 16 + i * ((BOT - TOP - 32) / 8)} y2={TOP + 16 + i * ((BOT - TOP - 32) / 8)} stroke="rgba(141,160,179,.35)" strokeWidth="1" />
           ))}
-          <line className="ceiling" x1="12" x2="104" y1={ceilingY} y2={ceilingY} />
-          <text className="ceiling-label" x="104" y={ceilingY - 4} textAnchor="end">
-            ${budget} CEILING
+          <text className="ceiling-label" x="104" y={TOP - 4} textAnchor="end">
+            NO CAP · INFO ONLY
           </text>
           <rect x="26" y={TOP + 8} width="6" height={BOT - TOP - 40} rx="3" fill="rgba(255,255,255,.06)" />
         </svg>
@@ -134,7 +131,7 @@ export function WalletGauge({ data }: { data: DeckOverview | null }) {
         </div>
         {spend !== null && (
           <div className="balance-sub">
-            est. agent spend on last 100 runs: <span style={{ color: danger > 0.5 ? "var(--coral)" : "var(--ember)" }}>${spend.toFixed(3)}</span>
+            informational agent usage (last 100 runs, no cap): <span style={{ color: danger > 0.5 ? "var(--coral)" : "var(--ember)" }}>${spend.toFixed(3)}</span>
           </div>
         )}
         <ul className="meter-list" aria-label="Usage breakdown">
@@ -165,7 +162,7 @@ export function WalletGauge({ data }: { data: DeckOverview | null }) {
           <li>
             <MeterIcon kind="free" />
             <span>Search / Fetch</span>
-            <span className="val free">FREE ∞ · {freeCalls.toLocaleString()}</span>
+            <span className="val free">LIVE · {freeCalls.toLocaleString()} calls</span>
           </li>
         </ul>
       </div>

@@ -13,6 +13,6 @@ export async function GET(req: Request) {
   if (surface && /^[a-z]{2,12}$/.test(surface)) eq.surface = surface;
   if (purpose && /^[a-z_]{2,40}$/.test(purpose)) eq.purpose = purpose;
   const rows = await safe(db.select<Row>("runs_log", { eq: Object.keys(eq).length ? eq : undefined, order: { col: "created_at" }, limit }), []);
-  const reports = await safe(db.select<Row>("benefit_reports", { order: { col: "created_at" }, limit: 50, select: "id,language,query,cache_hits,cache_misses,cost_usd,created_at" }), []);
+  const reports = await safe(db.select<Row>("benefit_reports", { order: { col: "created_at" }, limit: 50, select: "id,language,query,live_calls,elapsed_ms,cost_usd,created_at" }), []);
   return json({ runs: rows, reports });
 }
