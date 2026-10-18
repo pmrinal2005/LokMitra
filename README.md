@@ -6,7 +6,7 @@ LokMitra helps Indian citizens (farmers, e-Shram workers, students, the elderly,
 
 - **Stack:** Next.js 15.5 (App Router) · React 19 · TypeScript · Node 22 · Vercel (`bom1`). No Cloudflare / Hono.
 - **Security:** every TinyFish/Groq/Resend/Telegram key is server-only (`import "server-only"`).
-- **Language layer:** offline UI tables for 7 languages plus Groq (`qwen/qwen3-8b-27b`) for the other 16. **No Bhashini / IndicTrans.** Speech-to-text uses the browser Web Speech API; text-to-speech uses browser SpeechSynthesis.
+- **Language layer:** offline UI tables for 7 languages plus Groq (`qwen/qwen3.8-27b`) for the other 16. **No Bhashini / IndicTrans.** Speech-to-text uses the browser Web Speech API; text-to-speech uses browser SpeechSynthesis.
 - **Icons:** professional inline SVG icon set (`components/Icon.tsx`). No emoji in the UI.
 
 ## Pipeline (per query, every time)
@@ -26,6 +26,12 @@ Intake (web / Telegram / CSC / e-mail) → NLU (Groq, or keyword fallback) → *
 | 9 | Typecheck + build + vercel.json check | `npm run typecheck`, `npm run build`, `vercel.json` | Pass |
 | 10 | Live tests against the TinyFish key + UI screenshots | see below, `docs/screenshots/` | Pass |
 | 11 | Emoji → professional SVG icons (UI, ticker, terminal, report, e-mail, Telegram) | `components/Icon.tsx` | Done |
+| 12 | **3D sphere mascot** top-left of the Sahayak Journey card: glossy SVG sphere, radial glow, anime eyes, blink, mood by phase, cursor tracking via one rAF loop (calm/reduced-motion aware) | `components/SahayakMascot.tsx`, `app/globals.css` | Done |
+| 13 | **Horizontally scrollable suggestion chips** on one line (wheel → smooth horizontal glide, touch/trackpad swipe, edge fades) | `components/SahayakJourney.tsx` | Done |
+| 14 | **Icon-only mic button** (label removed; `aria-label`/tooltip kept; pulses while listening) | `components/SahayakJourney.tsx` | Done |
+| 15 | **Collapse/expand fix**: the card shrank its body but kept its grid-row height. Fixed with `align-self:start`. The chevron is now one icon that rotates with state. The body stays mounted (`inert`), so draft text survives and `aria-controls` always resolves | `components/SahayakJourney.tsx`, `app/globals.css` | Done |
+| 16 | **Groq audit**: all calls go through `groq-sdk` (reference request shape). `qwen/qwen3-8b-27b` maps to Groq's real id `qwen/qwen3.8-27b`, which fixes the 404. The retired `qwen/qwen3-32b` is removed (404). `reasoning_effort` is sent only to models that accept it, which fixes the 400. An empty 200 now falls through to the next model. A `json_validate_failed` 400 retries by streaming. Retired ids are skipped using the live `/models` list. 401/403 stop the chain. Whisper STT also goes through the SDK | `lib/lokmitra/groq.ts`, `lib/lokmitra/config.ts` | Done |
+| 17 | Suggestion chips send their own language (a Hindi chip no longer answers in English when the UI is English, and vice versa). Sentinel run-now accepts a monitor id or a sentinel id | `hooks/useJourney.ts`, `lib/lokmitra/sentinel.ts` | Done |
 
 ## Live verification (2026-10-18, real TinyFish key)
 | Surface / flow | Check | Result |
@@ -41,6 +47,9 @@ Intake (web / Telegram / CSC / e-mail) → NLU (Groq, or keyword fallback) → *
 | UI (Playwright) | full journey: ask → consent modal → report → snapshot/sources → language switch → citizen gate → operator → Usage tab → mobile | zero console errors; see `docs/screenshots/01…11` |
 
 Fixes made during live testing: the OTP-relay field labeller now walks preceding siblings and ancestors, so ASP.NET/NIC forms get proper labels. Single unlabeled identifier boxes are auto-filled. A CAPTCHA input now sets `captcha_present`. The `/settings#usage` deep link now switches tabs on a same-page hash change.
+
+## Hosting: Vercel only, Render is not used
+The whole app (UI + API routes + SSE + Telegram webhook + cron) runs as one Next.js project on Vercel. No code, config or env var references Render, so your Render credits stay unused. `vercel.json` passes JSON validation and `npm ci && npm run build` succeeds.
 
 ## Pages
 | Group | Page | Purpose |

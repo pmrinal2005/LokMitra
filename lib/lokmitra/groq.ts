@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import Groq, { toFile } from "groq-sdk";
 import { cfg } from "./config";
 import { guessLanguage, langByCode, LANG_CODES } from "./languages";
 import { COMMODITIES, DISTRICT_HINTS, SCHEMES, STATE_NAME_HINTS, type TaskKind } from "./schemes";
@@ -28,70 +29,166 @@ interface ChatOpts {
   purpose: string;
 }
 
-function isQwen(model: string) {
-  return /qwen/i.test(model);
+/* ------------------------------------------------------------------ */
+/* Model ids. Groq's real id for the spec's "qwen3-8b-27b" is             */
+/* "qwen/qwen3.8-27b"; "qwen/qwen3-32b" is deprecated (404). Both are     */
+/* mapped so an old env var never produces model_not_found again.         */
+/* ------------------------------------------------------------------ */
+const MODEL_ALIAS: Record<string, string> = {
+  "qwen/qwen3-8b-27b": "qwen/qwen3.8-27b",
+  "qwen3-8b-27b": "qwen/qwen3.8-27b",
+  "qwen/qwen3-8b": "qwen/qwen3.8-27b",
+  "qwen/qwen3-32b": "qwen/qwen3.8-27b",
+  "gpt-oss-120b": "openai/gpt-oss-120b",
+  "gpt-oss-20b": "openai/gpt-oss-20b",
+};
+export function resolveModel(m: string) {
+  const k = (m || "").trim();
+  return MODEL_ALIAS[k] ?? MODEL_ALIAS[k.toLowerCase()] ?? k;
 }
-function isGptOss(model: string) {
-  return /gpt-oss/i.test(model);
+
+/** reasoning_effort per Groq docs: gpt-oss & qwen3.8 accept low|medium|high. Others: omit (sending it = HTTP 400). */
+function reasoningFor(model: string): "medium" | undefined {
+  return /gpt-oss|qwen3\.8|muse-spark/i.test(model) ? "medium" : undefined;
 }
 
 /** Strip <think>…</think> blocks some reasoning models emit inline. */
 function stripThink(s: string) {
-  return s.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  return s.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^[\s\S]*?<\/think>/i, "").trim();
 }
 
+/** groq-sdk wants the host root (it appends /openai/v1/...). Passing ".../openai/v1" doubled the path → 404. */
+function sdkBase() {
+  return cfg.groqBase().replace(/\/openai\/v1$/i, "");
+}
+let _client: Groq | null = null;
+let _clientKey = "";
+function client(): Groq {
+  const key = cfg.groqKey();
+  if (!_client || _clientKey !== key) {
+    _client = new Groq({ apiKey: key, baseURL: sdkBase(), maxRetries: 1, timeout: 60_000 });
+    _clientKey = key;
+  }
+  return _client;
+}
+
+/** Live list of active model ids (cached 10 min) so retired ids are skipped instead of 404-ing. */
+let _models: { at: number; ids: Set<string> } | null = null;
+export async function activeModels(): Promise<Set<string> | null> {
+  if (!cfg.groqKey()) return null;
+  if (_models && Date.now() - _models.at < 600_000) return _models.ids;
+  try {
+    const r = await client().models.list();
+    const ids = new Set((r.data ?? []).map((m) => m.id));
+    if (ids.size) _models = { at: Date.now(), ids };
+    return ids.size ? ids : null;
+  } catch {
+    return null;
+  }
+}
+
+function errStatus(e: unknown): number {
+  const st = (e as { status?: number })?.status;
+  if (typeof st === "number") return st;
+  if ((e as Error)?.name === "AbortError" || /abort|timeout/i.test(String((e as Error)?.message))) return 504;
+  return 502;
+}
+
+/**
+ * One Groq chat completion, written exactly like the reference groq-sdk snippet:
+ *   { messages, model, temperature, max_completion_tokens, top_p: 1, stream: true, reasoning_effort: "medium", stop: null }
+ * - text calls stream and concatenate chunk.choices[0].delta.content
+ * - JSON calls use response_format json_object (Groq does not allow JSON mode + streaming → stream:false);
+ *   on 400 json_validate_failed they retry once as plain streamed text and the JSON is parsed out.
+ * - HTTP 200 with empty content (reasoning ate the budget, finish_reason "length") is now an error so the
+ *   chain falls through to the next model instead of silently returning "".
+ */
 export async function chat(o: ChatOpts): Promise<string> {
   const key = cfg.groqKey();
   if (!key) throw new GroqError(503, "GROQ_API_KEY not configured");
-  const body: Record<string, unknown> = {
-    model: o.model,
-    temperature: o.temperature ?? 0.2,
-    max_completion_tokens: o.maxTokens ?? 1200,
+  const model = resolveModel(o.model);
+  const effort = reasoningFor(model);
+  const base = {
+    model,
     messages: [
-      { role: "system", content: o.system },
-      { role: "user", content: o.user },
+      { role: "system" as const, content: o.system },
+      { role: "user" as const, content: o.user },
     ],
+    temperature: o.temperature ?? 1,
+    max_completion_tokens: Math.max(2048, o.maxTokens ?? 2048),
+    top_p: 1,
+    stop: null,
+    ...(effort ? { reasoning_effort: effort } : {}),
   };
-  if (o.json) body.response_format = { type: "json_object" };
-  if (isQwen(o.model)) body.reasoning_effort = "none"; // qwen3 on Groq: disable thinking for speed
-  if (isGptOss(o.model)) body.reasoning_effort = "low";
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), o.timeoutMs ?? 25_000);
   const t0 = Date.now();
-  try {
-    const res = await fetch(`${cfg.groqBase()}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-      cache: "no-store",
-    });
-    const text = await res.text();
-    if (!res.ok) {
-      void logRun({ surface: "llm", purpose: o.purpose, status: "error", latency_ms: Date.now() - t0, meta: { model: o.model, http: res.status } });
-      throw new GroqError(res.status, `groq ${res.status}: ${text.slice(0, 240)}`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Math.max(45_000, o.timeoutMs ?? 45_000));
+  const fail = (status: number, msg: string, http?: number) => {
+    void logRun({ surface: "llm", purpose: o.purpose, status: "error", latency_ms: Date.now() - t0, meta: { model, http: http ?? status, error: msg.slice(0, 200) } });
+    return new GroqError(status, `groq ${status} (${model}): ${msg.slice(0, 240)}`);
+  };
+
+  const streamText = async (): Promise<{ text: string; finish: string | null; usage: unknown }> => {
+    const stream = await client().chat.completions.create({ ...base, stream: true }, { signal: ctrl.signal });
+    let text = "";
+    let finish: string | null = null;
+    let usage: unknown = null;
+    for await (const chunk of stream) {
+      text += chunk.choices[0]?.delta?.content || "";
+      finish = chunk.choices[0]?.finish_reason ?? finish;
+      const xu = (chunk as unknown as { x_groq?: { usage?: unknown } }).x_groq?.usage;
+      if (xu) usage = xu;
     }
-    const j = JSON.parse(text) as { choices?: { message?: { content?: string } }[]; usage?: Record<string, number> };
-    const out = stripThink(j.choices?.[0]?.message?.content ?? "");
-    void logRun({ surface: "llm", purpose: o.purpose, latency_ms: Date.now() - t0, meta: { model: o.model, usage: j.usage ?? null } });
+    return { text, finish, usage };
+  };
+
+  try {
+    let text = "";
+    let finish: string | null = null;
+    let usage: unknown = null;
+    if (o.json) {
+      try {
+        const r = await client().chat.completions.create({ ...base, stream: false, response_format: { type: "json_object" } }, { signal: ctrl.signal });
+        text = r.choices[0]?.message?.content ?? "";
+        finish = r.choices[0]?.finish_reason ?? null;
+        usage = r.usage ?? null;
+      } catch (e) {
+        const st = errStatus(e);
+        const msg = String((e as Error).message ?? e);
+        if (st === 400 && /json_validate_failed|json|response_format/i.test(msg)) {
+          ({ text, finish, usage } = await streamText()); // retry once without JSON mode
+        } else throw e;
+      }
+    } else {
+      ({ text, finish, usage } = await streamText());
+    }
+    const out = stripThink(text);
+    if (!out) throw fail(502, `empty completion (finish_reason=${finish ?? "?"})`, 200);
+    void logRun({ surface: "llm", purpose: o.purpose, latency_ms: Date.now() - t0, meta: { model, finish, usage } });
     return out;
   } catch (e) {
     if (e instanceof GroqError) throw e;
-    throw new GroqError(502, `groq unreachable: ${(e as Error).message}`);
+    throw fail(errStatus(e), String((e as Error).message ?? e));
   } finally {
-    clearTimeout(t);
+    clearTimeout(timer);
   }
 }
 
 /** chat() with model fall-through (heavy → mid → light) — used by every call site. */
 async function chatChain(models: string[], o: Omit<ChatOpts, "model">): Promise<string> {
   let last: unknown;
-  for (const m of [...new Set(models.filter(Boolean))]) {
+  let list = [...new Set(models.filter(Boolean).map(resolveModel))];
+  const live = await activeModels();
+  if (live) {
+    const ok = list.filter((m) => live.has(m));
+    list = ok.length ? ok : [...live].filter((m) => /gpt-oss-(120|20)b$/.test(m));
+  }
+  for (const m of list) {
     try {
       return await chat({ ...o, model: m });
     } catch (e) {
       last = e;
-      if (e instanceof GroqError && e.status === 503) break; // no key: no point trying others
+      if (e instanceof GroqError && (e.status === 503 || e.status === 401 || e.status === 403)) break; // no / bad key
     }
   }
   throw last ?? new GroqError(500, "no model available");
@@ -301,12 +398,12 @@ export async function translate(text: string, target: string, opts: { source?: s
 }
 
 /**
- * Translation chain models, in order: GROQ_MODEL_TRANSLATE (default qwen/qwen3-8b-27b as specified),
- * then Groq's production Qwen3 (qwen/qwen3-32b), then gpt-oss-20b / 120b. The first one that answers wins,
+ * Translation chain models, in order: GROQ_MODEL_TRANSLATE (default qwen/qwen3.8-27b — Groq's id for the spec's qwen3-8b-27b),
+ * then the light model, then gpt-oss-20b / 120b (retired ids are skipped via the live /models list). The first one that answers wins,
  * so a renamed/retired model id never breaks localisation.
  */
 export function translateModels() {
-  return [...new Set([cfg.groqModelTranslate(), "qwen/qwen3-32b", cfg.groqModelMid(), cfg.groqModelHeavy()].filter(Boolean))];
+  return [...new Set([cfg.groqModelTranslate(), cfg.groqModelLight(), cfg.groqModelMid(), cfg.groqModelHeavy()].map(resolveModel).filter(Boolean))];
 }
 
 /** Batched translation of many short strings in ONE Groq call (JSON in / JSON out, order preserved). */
@@ -334,7 +431,9 @@ export async function translateBatch(texts: string[], target: string, opts: { pu
   for (const idxs of chunks) {
     const payload = Object.fromEntries(idxs.map((i, k) => [String(k), clean[i]]));
     let last: unknown;
-    for (const m of translateModels()) {
+    const live = await activeModels();
+    const chain = live ? translateModels().filter((m) => live.has(m)) : translateModels();
+    for (const m of chain.length ? chain : translateModels()) {
       try {
         const raw = await chat({
           model: m,
@@ -357,7 +456,7 @@ export async function translateBatch(texts: string[], target: string, opts: { pu
         break;
       } catch (e) {
         last = e;
-        if (e instanceof GroqError && e.status === 503) break;
+        if (e instanceof GroqError && (e.status === 503 || e.status === 401 || e.status === 403)) break;
       }
     }
     if (!any && last) console.warn("[lokmitra:translateBatch]", (last as Error).message);
@@ -488,20 +587,20 @@ export async function extractFromMarkdown<T>(opts: { markdown: string; schemaHin
 /* Web uses the browser's native Web Speech API instead.               */
 /* ================================================================== */
 export async function transcribe(audio: Blob, filename: string, languageHint?: string | null): Promise<string | null> {
-  const key = cfg.groqKey();
-  if (!key) return null;
-  const fd = new FormData();
-  fd.append("file", audio, filename);
-  fd.append("model", cfg.groqModelStt());
-  fd.append("response_format", "json");
-  if (languageHint && /^[a-z]{2}$/.test(languageHint)) fd.append("language", languageHint);
+  if (!cfg.groqKey()) return null;
   const t0 = Date.now();
   try {
-    const res = await fetch(`${cfg.groqBase()}/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd });
-    const j = (await res.json().catch(() => null)) as { text?: string } | null;
-    void logRun({ surface: "llm", purpose: "stt", status: res.ok ? "ok" : "error", latency_ms: Date.now() - t0, meta: { model: cfg.groqModelStt() } });
-    return res.ok ? (j?.text ?? "").trim() || null : null;
-  } catch {
+    const file = await toFile(Buffer.from(await audio.arrayBuffer()), filename || "voice.ogg", { type: audio.type || "audio/ogg" });
+    const r = await client().audio.transcriptions.create({
+      file,
+      model: cfg.groqModelStt(),
+      response_format: "json",
+      ...(languageHint && /^[a-z]{2}$/.test(languageHint) ? { language: languageHint } : {}),
+    });
+    void logRun({ surface: "llm", purpose: "stt", latency_ms: Date.now() - t0, meta: { model: cfg.groqModelStt() } });
+    return (r.text ?? "").trim() || null;
+  } catch (e) {
+    void logRun({ surface: "llm", purpose: "stt", status: "error", latency_ms: Date.now() - t0, meta: { model: cfg.groqModelStt(), http: errStatus(e) } });
     return null;
   }
 }

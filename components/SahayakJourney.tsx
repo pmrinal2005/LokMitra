@@ -12,6 +12,7 @@ import { RelayPanel } from "./RelayPanel";
 import type { UiKey } from "@/lib/i18n/ui-strings";
 import type { StructuredReport } from "@/lib/lokmitra/report-shape";
 import { Icon } from "./Icon";
+import { SahayakMascot } from "./SahayakMascot";
 
 const STAGE_KEY: Record<StageId, UiKey> = { listen: "st_listen", understand: "st_understand", search: "st_search", fetch: "st_fetch", consent: "st_consent", agent: "st_agent", report: "st_report" };
 const STAGE_ICON: Record<StageId, IconName> = { listen: "mic", understand: "brain", search: "search", fetch: "file", consent: "lock", agent: "bot", report: "clipboard" };
@@ -53,6 +54,7 @@ export function SahayakJourney() {
   const stopRef = useRef<(() => void) | null>(null);
   const lastTouch = useRef(Date.now());
   const modalRef = useRef<HTMLDivElement>(null);
+  const chipsRef = useRef<HTMLDivElement>(null);
 
   const speechOk = typeof window !== "undefined" && !!((window as unknown as { SpeechRecognition?: SR }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: SR }).webkitSpeechRecognition);
   const pendingConsent = s.consents.find((c) => c.decision === "pending") ?? null;
@@ -110,6 +112,44 @@ export function SahayakJourney() {
 
   useEffect(() => () => stopRef.current?.(), []);
 
+  /* suggestion chips: vertical wheel → smooth horizontal glide (accumulating rAF target, non-passive listener) */
+  const chipsVisible = s.phase === "idle" && !s.report && !collapsed;
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    let target = el.scrollLeft;
+    let raf = 0;
+    const step = () => {
+      const d = target - el.scrollLeft;
+      if (Math.abs(d) < 0.5) {
+        el.scrollLeft = target;
+        raf = 0;
+        return;
+      }
+      el.scrollLeft += d * 0.2;
+      raf = requestAnimationFrame(step);
+    };
+    const onWheel = (e: WheelEvent) => {
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 0 || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // native horizontal / trackpad swipe
+      const next = Math.max(0, Math.min(max, (raf ? target : el.scrollLeft) + e.deltaY));
+      if (next === target && (next === 0 || next === max)) return; // at an edge: let the page scroll
+      e.preventDefault();
+      target = next;
+      if (!raf) raf = requestAnimationFrame(step);
+    };
+    const onScroll = () => {
+      if (!raf) target = el.scrollLeft;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [chipsVisible]);
+
   const toggleMic = () => {
     const W = window as unknown as { SpeechRecognition?: SR; webkitSpeechRecognition?: SR };
     const Rec = W.SpeechRecognition || W.webkitSpeechRecognition;
@@ -144,7 +184,7 @@ export function SahayakJourney() {
     setShowEn(false);
     setText("");
     setCollapsed(false);
-    void j.ask(query);
+    void j.ask(query, l || lang);
   };
 
   const toggleSpeak = () => {
@@ -176,13 +216,16 @@ export function SahayakJourney() {
   return (
     <section id="sahayak-journey" className={`panel journey-panel area-journey ${collapsed ? "is-collapsed" : ""}`} style={{ ["--i" as string]: 0 }} aria-labelledby="journey-title">
       <header className="panel-head journey-head">
-        <div className="journey-titles">
-          <h2 className="panel-title" id="journey-title">
-            <span className="glyph" style={{ background: "var(--saffron)", boxShadow: "0 0 10px var(--saffron)" }} /> {t("journey_title")}
-          </h2>
-          {!collapsed && <p className="journey-sub">{t("journey_sub")}</p>}
+        <div className="journey-brand">
+          <SahayakMascot size={collapsed ? 44 : 64} mood={s.phase} />
+          <div className="journey-titles">
+            <h2 className="panel-title" id="journey-title">
+              <span className="glyph" style={{ background: "var(--saffron)", boxShadow: "0 0 10px var(--saffron)" }} /> {t("journey_title")}
+            </h2>
+            <p className={`journey-sub ${collapsed ? "is-hidden" : ""}`} aria-hidden={collapsed}>{t("journey_sub")}</p>
+          </div>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row journey-controls" style={{ gap: 8 }}>
           <span className={`journey-chip ${chip.cls}`} role="status" aria-live="polite">
             <span className={`live-dot ${s.phase === "working" ? "pulse" : ""}`} />
             {chip.label}
@@ -192,8 +235,20 @@ export function SahayakJourney() {
               <option key={l.code} value={l.code}>{l.native}</option>
             ))}
           </select>
-          <button className="icon-btn" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} aria-controls="journey-body" title={collapsed ? t("expand") : t("collapse")}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">{collapsed ? <path d="M6 9l6 6 6-6" /> : <path d="M6 15l6-6 6 6" />}</svg>
+          <button
+            type="button"
+            className={`icon-btn journey-toggle ${collapsed ? "is-collapsed" : ""}`}
+            onClick={() => {
+              lastTouch.current = Date.now();
+              setCollapsed((c) => !c);
+            }}
+            aria-expanded={!collapsed}
+            aria-controls="journey-body"
+            aria-label={collapsed ? t("expand") : t("collapse")}
+            title={collapsed ? t("expand") : t("collapse")}
+          >
+            {/* one chevron that rotates — the icon always reflects the real state */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
           </button>
         </div>
       </header>
@@ -209,11 +264,12 @@ export function SahayakJourney() {
         ))}
       </ol>
 
-      {collapsed ? (
-        <button className="journey-collapsed-line" onClick={() => setCollapsed(false)}>
+      {collapsed && (
+        <button type="button" className="journey-collapsed-line" onClick={() => setCollapsed(false)}>
           {s.question ? <b>“{s.question.slice(0, 90)}{s.question.length > 90 ? "…" : ""}”</b> : t("idle_title")} <span className="fog">· {liveLine || t("show_report")}</span>
         </button>
-      ) : (
+      )}
+      <div className={`journey-collapsible ${collapsed ? "" : "open"}`} {...(collapsed ? { inert: true } : {})}>
         <div id="journey-body" className="journey-body">
           {/* ---------- IDLE ---------- */}
           {s.phase === "idle" && !s.report && (
@@ -222,9 +278,9 @@ export function SahayakJourney() {
                 <b>{t("idle_title")}</b>
                 <p>{t("idle_sub")}</p>
               </div>
-              <div className="presets">
+              <div className="presets presets-scroll" role="list" aria-label="Suggestions" tabIndex={0} ref={chipsRef}>
                 {EXAMPLES.map((e) => (
-                  <button key={e.t} className="preset" onClick={() => submit(e.t, e.l)} disabled={busy}>
+                  <button key={e.t} type="button" role="listitem" className="preset" onClick={() => submit(e.t, e.l)} disabled={busy} title={e.t} lang={e.l}>
                     {e.t}
                   </button>
                 ))}
@@ -343,8 +399,8 @@ export function SahayakJourney() {
               lang={lang}
             />
             <div className="journey-input-actions">
-              <button type="button" className={`btn ${listening ? "paid" : ""}`} onClick={toggleMic} disabled={!speechOk} title={speechOk ? (listening ? t("mic_stop") : t("mic_start")) : t("mic_unsupported")} aria-pressed={listening}>
-                {listening ? <><Icon name="record" /> {t("mic_stop")}</> : <><Icon name="mic" /> {t("mic_start")}</>}
+              <button type="button" className={`btn mic-btn ${listening ? "paid is-listening" : ""}`} onClick={toggleMic} disabled={!speechOk} title={speechOk ? (listening ? t("mic_stop") : t("mic_start")) : t("mic_unsupported")} aria-label={speechOk ? (listening ? t("mic_stop") : t("mic_start")) : t("mic_unsupported")} aria-pressed={listening}>
+                <Icon name={listening ? "record" : "mic"} />
               </button>
               {busy ? (
                 <button type="button" className="btn danger" onClick={j.cancel}>{t("cancel")}</button>
@@ -357,7 +413,7 @@ export function SahayakJourney() {
             </div>
           </form>
         </div>
-      )}
+      </div>
 
       {/* ---------- CONSENT MODAL ---------- */}
       {pendingConsent && !collapsed && typeof document !== "undefined" && createPortal(

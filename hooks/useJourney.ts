@@ -135,7 +135,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
 
   /* ---------------- ask ---------------- */
   const ask = useCallback(
-    async (text: string) => {
+    async (text: string, langOverride?: string) => {
       const q = text.trim();
       if (!q) return;
       abortRef.current?.abort();
@@ -143,7 +143,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
       abortRef.current = ctrl;
       setS({ ...stage(stage(fresh(), "listen", "done"), "understand", "active"), phase: "working", question: q, startedAt: Date.now() });
       bus.emit("journey", { type: "stage", stage: "nlu", message: `citizen asked: “${q.slice(0, 80)}${q.length > 80 ? "…" : ""}”` });
-      const o = optsRef.current;
+      const o = { ...optsRef.current, lang: langOverride || optsRef.current.lang };
       try {
         await ssePost(
           "/api/lokmitra/ask",

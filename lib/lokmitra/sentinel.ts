@@ -347,7 +347,13 @@ function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-export async function runSentinelNow(monitorId: string) {
+export async function runSentinelNow(idOrMonitorId: string) {
+  // accept either the TinyFish monitor_id (UI) or the LokMitra sentinel row id
+  let monitorId = idOrMonitorId;
+  if (!(await getSentinel(monitorId))) {
+    const row = (await safe(db.one<Row>("sentinels", { eq: { id: idOrMonitorId } }), null)) as unknown as SentinelRow | null;
+    if (row?.monitor_id) monitorId = row.monitor_id;
+  }
   const res = await run_monitor_now(monitorId);
   const run = (res.run ?? {}) as PagePayload & Record<string, unknown>;
   const s = await getSentinel(monitorId);

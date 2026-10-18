@@ -11,7 +11,7 @@ export const maxDuration = 60;
  * GET  /api/lokmitra/localize?lang=xx
  *   → the full UI string table for `lang`. 7 languages are served from the offline table ($0, instant);
  *     the other 16 scheduled languages are machine-translated from English via Groq
- *     (qwen/qwen3-8b-27b chain). Without GROQ_API_KEY the script fallback table is returned.
+ *     (qwen/qwen3.8-27b chain). Without GROQ_API_KEY the script fallback table is returned.
  * POST /api/lokmitra/localize { lang, texts: string[] }  (max 40 strings, 600 chars each)
  *   → { texts, via } — free-text localisation for journey bubbles / snapshot items.
  * No Bhashini / IndicTrans: Groq only.
