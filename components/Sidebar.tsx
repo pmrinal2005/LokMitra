@@ -2,8 +2,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useRole } from "@/hooks/useRole";
+import { useT } from "@/lib/i18n/client";
 
-type Item = { href: string; label: string; icon: React.ReactNode; badge?: { text: string; paid?: boolean } };
+type Item = { href: string; label: string; icon: React.ReactNode; badge?: { text: string; paid?: boolean }; operatorOnly?: boolean };
 
 const I = {
   deck: <path d="M3 12c3-6 6-6 9 0s6 6 9 0M3 7h4M17 17h4" />,
@@ -52,7 +54,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { href: "/judge", label: "Judge Console", icon: svg(I.judge), badge: { text: "live" } },
       { href: "/impact", label: "Impact & Wallet", icon: svg(I.chart) },
       { href: "/runs", label: "Runs Log", icon: svg(I.runs) },
-      { href: "/settings", label: "Settings", icon: svg(I.gear) },
+      { href: "/settings", label: "Settings", icon: svg(I.gear), badge: { text: "operator" }, operatorOnly: true },
     ],
   },
 ];
@@ -74,6 +76,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [wallet, setWallet] = useState<{ bal: string | null; spend: number | null }>({ bal: null, spend: null });
+  const { isOperator, ready: roleReady, switchTo, error: roleError } = useRole();
+  const { t, lang, setLang, languages } = useT();
 
   useEffect(() => {
     try {
@@ -82,6 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => setDrawer(false), [path]);
   useEffect(() => {
+    if (!isOperator) return;
     let alive = true;
     const load = async () => {
       try {
@@ -91,12 +96,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       } catch {}
     };
     load();
-    const t = setInterval(load, 30_000);
+    const timer = setInterval(load, 30_000);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearInterval(timer);
     };
-  }, []);
+  }, [isOperator]);
 
   const toggle = () => {
     setCollapsed((c) => {
@@ -126,7 +131,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {GROUPS.map((g) => (
             <div key={g.title} className="stack" style={{ gap: 3 }}>
               <div className="sb-section">{g.title}</div>
-              {g.items.map((it) => {
+              {g.items.filter((it) => !it.operatorOnly || isOperator).map((it) => {
                 const active = it.href === "/" ? path === "/" : path.startsWith(it.href);
                 return (
                   <Link key={it.href} href={it.href} className="sb-link" aria-current={active ? "page" : undefined} title={it.label}>
@@ -140,13 +145,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="sb-foot" aria-live="polite">
-          <span title="Live TinyFish wallet balance">
-            ◈ <span className="sb-foot-text">wallet </span>
-            <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b>
-          </span>
-          <span className="sb-foot-text">
-            used <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> · no cap
-          </span>
+          <label className="sb-lang" title={t("lang_label")}>
+            <span aria-hidden="true">🌐</span>
+            <select className="sb-lang-select sb-foot-text" value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t("lang_label")}>
+              {languages.map((l) => (
+                <option key={l.code} value={l.code}>{l.native}</option>
+              ))}
+            </select>
+          </label>
+          {isOperator ? (
+            <>
+              <span title="Live TinyFish wallet balance" className="sb-wallet">
+                ◈ <span className="sb-foot-text">wallet </span>
+                <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b>
+              </span>
+              <span className="sb-foot-text">
+                used <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> · no cap
+              </span>
+            </>
+          ) : null}
+          {roleReady && (
+            <button className="sb-role sb-foot-text" onClick={() => void switchTo(isOperator ? "citizen" : "operator")} title={roleError ?? undefined}>
+              {isOperator ? `👤 ${t("role_switch_citizen")}` : `🛠 ${t("role_switch_operator")}`}
+            </button>
+          )}
+          {roleError && <span className="sb-foot-text err-note" style={{ whiteSpace: "normal" }}>{roleError}</span>}
         </div>
       </aside>
       <div className="sb-scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
@@ -162,7 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             LokMitra
           </span>
           <span className="chip" style={{ marginLeft: "auto" }}>
-            {wallet.bal ? `$${wallet.bal}` : "—"}
+            {isOperator ? (wallet.bal ? `$${wallet.bal}` : "—") : t(isOperator ? "role_operator" : "role_citizen")}
           </span>
         </div>
         {children}

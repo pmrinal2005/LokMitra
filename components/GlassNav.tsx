@@ -1,12 +1,17 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-export const NAV_ITEMS = [
-  { id: "mission-deck", label: "Mission Deck" },
-  { id: "agent-logs", label: "Agent Logs" },
-  { id: "wallet", label: "Wallet" },
-  { id: "sectors", label: "Sectors" },
-] as const;
+import { useT } from "@/lib/i18n/client";
+import type { UiKey } from "@/lib/i18n/ui-strings";
+
+/** In-page pills. "Wallet" is operator-only and deep-links to Settings → Usage & Infrastructure. */
+export const NAV_ITEMS: { id: string; key: UiKey; href?: string; operatorOnly?: boolean }[] = [
+  { id: "sahayak-journey", key: "nav_journey" },
+  { id: "mission-deck", key: "nav_network" },
+  { id: "agent-logs", key: "nav_logs" },
+  { id: "sectors", key: "nav_sectors" },
+  { id: "wallet", key: "nav_wallet", href: "/settings#usage", operatorOnly: true },
+];
 
 function Logomark() {
   // single-line fish swimming an infinite figure-8 inside its own bounding box (pure SVG/CSS)
@@ -29,6 +34,7 @@ export function GlassNav({
   onSound,
   calm,
   onCalm,
+  isOperator = false,
 }: {
   activeAgents: number;
   connected: boolean;
@@ -37,7 +43,10 @@ export function GlassNav({
   onSound: () => void;
   calm: boolean;
   onCalm: () => void;
+  isOperator?: boolean;
 }) {
+  const { t } = useT();
+  const items = NAV_ITEMS.filter((n) => !n.operatorOnly || isOperator);
   const [hidden, setHidden] = useState(false);
   const [active, setActive] = useState<string>(NAV_ITEMS[0].id);
   const [drop, setDrop] = useState({ left: 3, width: 0 });
@@ -59,7 +68,7 @@ export function GlassNav({
 
   // scroll-spy
   useEffect(() => {
-    const els = NAV_ITEMS.map((n) => document.getElementById(n.id)).filter(Boolean) as HTMLElement[];
+    const els = NAV_ITEMS.filter((n) => !n.href).map((n) => document.getElementById(n.id)).filter(Boolean) as HTMLElement[];
     const io = new IntersectionObserver(
       (entries) => {
         if (Date.now() < clickLock.current) return;
@@ -77,9 +86,14 @@ export function GlassNav({
     const wrap = pillsRef.current;
     const btn = wrap?.querySelector<HTMLButtonElement>(`[data-id="${active}"]`);
     if (wrap && btn) setDrop({ left: btn.offsetLeft, width: btn.offsetWidth });
-  }, [active]);
+  }, [active, items.length, t]);
 
   const go = (id: string) => {
+    const item = NAV_ITEMS.find((n) => n.id === id);
+    if (item?.href) {
+      window.location.href = item.href;
+      return;
+    }
     setActive(id);
     clickLock.current = Date.now() + 900;
     document.getElementById(id)?.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
@@ -100,9 +114,9 @@ export function GlassNav({
 
       <div className="nav-pills" ref={pillsRef} role="tablist">
         <span className="nav-droplet" style={{ left: drop.left, width: drop.width }} aria-hidden="true" />
-        {NAV_ITEMS.map((n) => (
-          <button key={n.id} data-id={n.id} className="nav-pill" aria-current={active === n.id} role="tab" onClick={() => go(n.id)}>
-            {n.label}
+        {items.map((n) => (
+          <button key={n.id} data-id={n.id} className={`nav-pill ${n.href ? "nav-pill-ext" : ""}`} aria-current={active === n.id} role="tab" onClick={() => go(n.id)} title={n.href ? "Operator · Settings → Usage & Infrastructure" : undefined}>
+            {t(n.key)}{n.href ? " ↗" : ""}
           </button>
         ))}
       </div>

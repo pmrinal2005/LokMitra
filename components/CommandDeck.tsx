@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { GlassNav } from "./GlassNav";
 import { LivingMap } from "./LivingMap";
 import { MobileTop3 } from "./MobileTop3";
-import { WalletGauge } from "./WalletGauge";
-import { LiveRing } from "./LiveRing";
+import { SahayakJourney } from "./SahayakJourney";
+import { BenefitSnapshot } from "./BenefitSnapshot";
+import { VerifiedSource } from "./VerifiedSource";
 import { AgentTerminal } from "./AgentTerminal";
 import { Porthole } from "./Porthole";
 import { SectorTiles } from "./SectorTiles";
@@ -13,12 +14,16 @@ import { useDeckData } from "@/hooks/useDeckData";
 import { useMission } from "@/hooks/useMission";
 import { useSonar } from "@/hooks/useSonar";
 import { useCalm } from "@/hooks/useCalm";
+import { useRole } from "@/hooks/useRole";
+import { useSessionSummary } from "@/hooks/useSessionSummary";
 
 export function CommandDeck() {
   const mission = useMission();
   const { data, error, loading, refresh } = useDeckData(mission.state.running);
   const sonar = useSonar();
   const { calm, toggle: toggleCalm } = useCalm();
+  const { isOperator } = useRole();
+  const summary = useSessionSummary();
 
   // when a local mission finishes, pull fresh numbers immediately
   const [lastStatus, setLastStatus] = useState(mission.state.status);
@@ -36,7 +41,7 @@ export function CommandDeck() {
 
   return (
     <>
-      <GlassNav activeAgents={activeAgents} connected={connected} configured={configured} soundOn={sonar.enabled} onSound={sonar.toggle} calm={calm} onCalm={toggleCalm} />
+      <GlassNav activeAgents={activeAgents} connected={connected} configured={configured} soundOn={sonar.enabled} onSound={sonar.toggle} calm={calm} onCalm={toggleCalm} isOperator={isOperator} />
 
       <main className="deck" id="main">
         <h1 className="sr-only">LokMitra × TinyFish — Bioluminescent Command Deck</h1>
@@ -57,8 +62,13 @@ export function CommandDeck() {
           </section>
         )}
 
+        {/* ---------------- CITIZEN JOURNEY (hero) + SNAPSHOT + SOURCES ---------------- */}
+        <SahayakJourney />
+        <BenefitSnapshot data={summary.data} loading={summary.loading} error={summary.error} />
+        <VerifiedSource data={summary.data} loading={summary.loading} />
+
         {/* ---------------- HERO MAP ---------------- */}
-        <section id="mission-deck" className="panel map-panel area-map textile-corner breathe" style={{ ["--i" as string]: 1, ["--bob" as string]: "6s" }} aria-labelledby="map-title">
+        <section id="mission-deck" className="panel map-panel area-map textile-corner breathe" style={{ ["--i" as string]: 3, ["--bob" as string]: "6s" }} aria-labelledby="map-title">
           <header className="panel-head">
             <h2 className="panel-title" id="map-title">
               <span className="glyph" /> The Living Network
@@ -75,27 +85,13 @@ export function CommandDeck() {
           {data?.errors.runs && <div className="err-note" style={{ padding: "0 22px 14px" }}>runs feed: {data.errors.runs.message}</div>}
         </section>
 
-        {/* ---------------- WALLET ---------------- */}
-        <section id="wallet" className="panel area-wallet breathe" style={{ ["--i" as string]: 2, ["--bob" as string]: "5.2s" }} aria-labelledby="wallet-title">
-          <header className="panel-head">
-            <h2 className="panel-title" id="wallet-title">
-              <span className="glyph" style={{ background: "var(--aqua)", boxShadow: "0 0 10px var(--aqua)" }} /> Wallet Telemetry
-            </h2>
-            <span className="panel-sub">GET /v1/wallet</span>
-          </header>
-          <WalletGauge data={data} />
-        </section>
-
-        {/* ---------------- LIVE EXECUTION RING ---------------- */}
-        <section className="panel area-ring breathe" style={{ ["--i" as string]: 3, ["--bob" as string]: "5.8s" }} aria-labelledby="ring-title">
-          <header className="panel-head">
-            <h2 className="panel-title" id="ring-title">
-              <span className="glyph" style={{ background: "var(--jade)", boxShadow: "0 0 10px var(--jade)" }} /> Live Execution
-            </h2>
-            <span className="panel-sub">every call live · 0% cached</span>
-          </header>
-          <LiveRing data={data} />
-        </section>
+        {/* Wallet Telemetry + Live Execution moved verbatim to Settings → "Usage & Infrastructure" (operator only). */}
+        {isOperator && (
+          <aside className="panel area-ops ops-pointer" style={{ ["--i" as string]: 4 }} aria-label="Operator shortcuts">
+            <span className="note">🛠 Operator · Wallet Telemetry, Live Execution and the run log live in</span>
+            <a className="btn sm" href="/settings#usage">Settings → Usage &amp; Infrastructure →</a>
+          </aside>
+        )}
 
         {/* ---------------- TERMINAL ---------------- */}
         <section id="agent-logs" className="panel term-panel area-term" style={{ ["--i" as string]: 4 }} aria-labelledby="term-title">

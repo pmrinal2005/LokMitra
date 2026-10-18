@@ -1,7 +1,7 @@
 "use client";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LogLine } from "@/lib/deck-types";
-import { bus } from "@/lib/bus";
+import { bus, type JourneyEvent } from "@/lib/bus";
 import { classifyState, hostOf } from "@/lib/classify";
 
 export type MissionMode = "agent" | "search" | "fetch" | "monitor";
@@ -338,6 +338,66 @@ export function useMission() {
     },
     [push],
   );
+
+  /* ---------------- JOURNEY EVENTS (citizen Sahayak → terminal + porthole + map) ---------------- */
+  const onJourney = useCallback(
+    (e: JourneyEvent) => {
+      switch (e.type) {
+        case "stage":
+          push(mk("·", "meta", `sahayak » ${e.message}`, e));
+          if (e.stage === "nlu") setState((s) => ({ ...s, running: true, status: "running" }));
+          break;
+        case "search":
+          push(mk(e.error ? "✕" : "✓", e.error ? "fail" : "free", `search » ${e.scheme} · ${e.results} result(s)${e.host ? ` → ${e.host}` : ""} · free`, e));
+          bus.emit("fish", { type: "swim", id: `j-s-${Date.now()}-${Math.random()}`, target: classifyState(`${e.state ?? ""} ${e.host ?? ""}`), color: "#4FD9FF" });
+          if (!e.error) bus.emit("spark", { count: 1 });
+          break;
+        case "fetch":
+          push(mk(e.ok ? "✓" : "⚠", e.ok ? "free" : "retry", `fetch » ${e.ok}/${e.total} official page(s) read live · ${e.hosts.slice(0, 4).join(", ")} · free`, e));
+          if (e.ok) bus.emit("spark", { count: Math.min(e.ok, 5) });
+          break;
+        case "consent":
+          push(mk(e.decision === "denied" ? "·" : "◆", e.decision === "allowed" ? "action" : "meta", `consent » ${e.scheme} on ${e.host}: ${e.decision}`, e));
+          break;
+        case "agent": {
+          const id = e.run_id ? e.run_id : `j-agent-${e.scheme}`;
+          if (e.phase === "start") {
+            setState({ running: true, runId: null, streamingUrl: null, host: e.host ?? "", step: 0, lastResult: null, status: "running" });
+            push(mk("◆", "meta", `GOAL » ${e.scheme} live check on ${e.host ?? "portal"} (citizen-consented)`, e));
+            bus.emit("fish", { type: "swim", id, target: classifyState(e.host ?? ""), persistent: true, color: "#2EF2C3" });
+          } else if (e.phase === "stream") {
+            setState((s) => ({ ...s, streamingUrl: e.streaming_url ?? s.streamingUrl, runId: e.run_id ?? s.runId }));
+            push(mk("·", "meta", "live browser stream attached → porthole", e));
+          } else if (e.phase === "step") {
+            setState((s) => ({ ...s, step: s.step + 1 }));
+            push(mk("▶", "action", `step · ${e.text ?? "browser action"}`, e));
+            bus.emit("fish", { type: "hop", id });
+          } else if (e.phase === "done") {
+            setState((s) => ({ ...s, running: false, status: e.ok ? "COMPLETED" : "FAILED", step: e.steps ?? s.step }));
+            push(mk(e.ok ? "✓" : "⚠", e.ok ? "success" : "retry", `COMPLETE · ${e.scheme} · ${e.steps ?? 0} steps${e.cost_usd ? ` · $${e.cost_usd.toFixed(3)}` : ""}${e.text ? ` · ${e.text}` : ""}`, e));
+            bus.emit("fish", { type: "end", id, ok: !!e.ok });
+            bus.emit("bloop", { ok: !!e.ok });
+          } else {
+            setState((s) => ({ ...s, running: false, status: "ERROR" }));
+            push(mk("✕", "fail", `agent » ${e.scheme}: ${e.text ?? "error"}`, e));
+            bus.emit("fish", { type: "end", id, ok: false });
+          }
+          break;
+        }
+        case "otp":
+          push(mk("◆", "meta", `otp relay » ${e.scheme}: ${e.phase === "start" ? "citizen logging in with own OTP (Browser Context Profile)" : e.phase === "saved" ? "session saved → agent will reuse it (use_profile)" : "closed"}`, e));
+          break;
+        case "report":
+          setState((s) => ({ ...s, running: false, status: "COMPLETED" }));
+          push(mk("✓", "success", `report » ${e.sections} section(s)${e.elapsed_ms ? ` in ${(e.elapsed_ms / 1000).toFixed(1)}s` : ""} · id ${e.report_id.slice(0, 8)}`, e));
+          bus.emit("bloop", { ok: true });
+          break;
+      }
+    },
+    [push],
+  );
+
+  useEffect(() => bus.on("journey", onJourney), [onJourney]);
 
   return { lines, state, runAgent, runSearch, runFetch, runMonitor, runMonitorNow, cancel, clear, inspectRun };
 }

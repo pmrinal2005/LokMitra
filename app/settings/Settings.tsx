@@ -2,6 +2,9 @@
 import { useEffect, useState } from "react";
 import { adminToken, api, setAdminToken } from "@/lib/client";
 import { Flash, Json, PageHead, Panel, useAction, useApi } from "@/components/ui";
+import { UsageInfrastructure } from "@/components/UsageInfrastructure";
+import { useRole } from "@/hooks/useRole";
+import { useT } from "@/lib/i18n/client";
 
 interface S {
   integrations: Record<string, boolean | string | null>;
@@ -30,6 +33,31 @@ const INT: { k: string; label: string; env: string; need: string }[] = [
 ];
 
 export function Settings() {
+  const { isOperator, ready, switchTo, error: roleError } = useRole();
+  const { t } = useT();
+  const [tok, setTok] = useState("");
+  useEffect(() => setTok(adminToken()), []);
+  if (!ready) return <div className="page"><p className="note">…</p></div>;
+  if (!isOperator) {
+    return (
+      <div className="page" style={{ maxWidth: 720 }}>
+        <PageHead title={t("role_needed")} sub={t("role_needed_body")} />
+        <Panel title="Operator token" sub="Paste ADMIN_TOKEN (if this deployment sets one), then switch to the operator view. Citizens never see wallet, usage or infrastructure data.">
+          <div className="row">
+            <input className="input" type="password" style={{ flex: 1 }} placeholder="ADMIN_TOKEN (leave empty in open demo mode)" value={tok} onChange={(e) => setTok(e.target.value)} />
+            <button className="btn primary" onClick={async () => { setAdminToken(tok.trim()); await switchTo("operator"); }}>{t("role_switch_operator")}</button>
+          </div>
+          {roleError && <p className="note err">⚠ {roleError}</p>}
+        </Panel>
+      </div>
+    );
+  }
+  return <OperatorSettings />;
+}
+
+function OperatorSettings() {
+  const [tab, setTab] = useState<"integrations" | "usage">(() => (typeof window !== "undefined" && window.location.hash === "#usage" ? "usage" : "integrations"));
+  const { t } = useT();
   const s = useApi<S>("/api/lokmitra/settings");
   const h = useApi<Health>("/api/health");
   const act = useAction();
@@ -78,6 +106,11 @@ export function Settings() {
         {d && <span className={`chip ${d.admin.you_are_admin ? "hit" : "miss"}`}>{d.admin.required ? (d.admin.you_are_admin ? "operator ✓" : "operator token needed") : "open demo mode"}</span>}
       </PageHead>
       <Flash {...act} />
+      <div className="mode-switch settings-tabs" role="tablist" aria-label="Settings sections">
+        <button role="tab" className="mode-btn" aria-selected={tab === "integrations"} aria-pressed={tab === "integrations"} onClick={() => { setTab("integrations"); history.replaceState(null, "", "#integrations"); }}>{t("tab_integrations")}</button>
+        <button role="tab" className="mode-btn" aria-selected={tab === "usage"} aria-pressed={tab === "usage"} onClick={() => { setTab("usage"); history.replaceState(null, "", "#usage"); }}>{t("tab_usage")}</button>
+      </div>
+      {tab === "usage" ? <UsageInfrastructure /> : <>
       {s.error && <p className="note err">⚠ {s.error}</p>}
 
       <div className="grid-2">
@@ -165,6 +198,7 @@ export function Settings() {
           </div>
         )}
       </Panel>
+      </>}
     </div>
   );
 }
