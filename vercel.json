@@ -3,18 +3,14 @@
   "framework": "nextjs",
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
-  "regions": [
-    "bom1"
+  "regions": ["bom1"],
+  "crons": [
+    { "path": "/api/cron/prefetch", "schedule": "0 21 * * *" }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, max-age=0"
-        }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
   ]
 }

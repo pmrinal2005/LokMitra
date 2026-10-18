@@ -73,17 +73,50 @@ const PRICE_HINT = `{"commodity":string,"prices":[{"market":string,"min_price":s
 const DEADLINE_HINT = `{"deadline":string|null,"season":string|null,"latest_notice_title":string|null,"latest_notice_date":string|null,"what_changed":string|null,"official_url":string|null}`;
 
 function excerpt(text: string, re: RegExp, max = 900) {
-  const paras = text.split(/\n{1,}/).map((p) => p.trim()).filter((p) => p.length > 30 && !/^\[?!\[/.test(p));
+  const BOILER = /sign out|skip to (main )?content|screen reader|cookie|javascript is (disabled|required)|NeGD|Electronics Niketan|all rights reserved|visitor (count|no)|last updated on|font size|text size|^\W*(home|login|menu)\W*$/i;
+  const paras = text.split(/\n{1,}/).map((p) => p.trim()).filter((p) => p.length > 30 && !/^\[?!\[/.test(p) && !BOILER.test(p));
   const hits = paras.filter((p) => re.test(p));
-  const pick = (hits.length ? hits : paras).slice(0, 6).join("\n");
+  const pick = (hits.length ? hits : paras).filter((p) => !/^##\s*SOURCE\b/.test(p) || p.length > 120).slice(0, 6).join("\n").replace(/##\s*SOURCE\s+\S+\s*/g, "");
   return clip(pick, max);
+}
+
+interface PriceRow { market: string; district: string | null; min_price: string | null; max_price: string | null; modal_price: string | null; unit: string; date: string | null }
+
+/** Deterministic parser for AgMarkNet-derived tables (agriplus) and overview blocks (acrop) — no LLM needed. */
+export function parsePriceTables(md: string, district?: string | null): { rows: PriceRow[]; typical?: string | null } {
+  const rows: PriceRow[] = [];
+  for (const line of md.split("\n")) {
+    if (!line.includes("|")) continue;
+    const c = line.split("|").map((x) => x.trim());
+    while (c.length && c[0] === "") c.shift();
+    while (c.length && c[c.length - 1] === "") c.pop();
+    // Sl no | State | District | Market | Commodity | Variety | Min | Max | Modal | Date
+    const off = /^\d+$/.test(c[0] ?? "") ? 1 : 0;
+    const nums = [c[off + 5], c[off + 6], c[off + 7]];
+    if (c.length >= off + 9 && nums.every((n) => /^\d{2,6}$/.test(n ?? ""))) {
+      rows.push({ market: c[off + 2], district: c[off + 1], min_price: nums[0], max_price: nums[1], modal_price: nums[2], unit: "per quintal", date: c[off + 8] || null });
+    }
+  }
+  const t = md.match(/Typical mandi price\s*\n+\s*(₹[\d,]+\s*\/\s*quintal)\s*\n+\s*(Median of \d+ reporting mandis)?/i);
+  const d = district?.toLowerCase();
+  rows.sort((a, b) => Number(!!d && b.district?.toLowerCase() === d) - Number(!!d && a.district?.toLowerCase() === d));
+  return { rows: rows.slice(0, 8), typical: t ? `${t[1]}${t[2] ? ` (${t[2]})` : ""}` : null };
+}
+
+/** Prefer the official URL we asked for when the fetch ended on a raw-IP mirror. */
+function shownUrl(p: { url: string; final_url: string | null }) {
+  return p.final_url && !/^\d{1,3}(\.\d{1,3}){3}$/.test(hostOf(p.final_url)) ? p.final_url : p.url;
 }
 
 async function extractSection(scheme: SchemeDef, sub: SubQuery, pages: FetchedPage[], intent: Intent): Promise<{ data: Record<string, unknown>; status: Section["status"] }> {
   const good = pages.filter((p) => p.text && p.text.length > 80);
   if (!good.length) return { data: { excerpt: null, errors: pages.map((p) => `${hostOf(p.url)}: ${p.error ?? "empty"}`) }, status: "error" };
-  const md = good.map((p) => `## SOURCE ${p.final_url ?? p.url}\n# ${p.title ?? ""}\n${p.text}`).join("\n\n").slice(0, 15000);
+  const md = good.map((p) => `## SOURCE ${shownUrl(p)}\n# ${p.title ?? ""}\n${p.text}`).join("\n\n").slice(0, 15000);
   if (sub.task === "price") {
+    const det = parsePriceTables(good.map((p) => p.text).join("\n"), intent.district);
+    if (det.rows.length || det.typical) {
+      return { data: { commodity: intent.commodity, typical_price: det.typical ?? null, prices: det.rows.map((r) => ({ market: r.market, district: r.district, min_price: r.min_price, max_price: r.max_price, modal_price: r.modal_price, unit: r.unit, date: r.date })), parsed_by: "deterministic" }, status: "ok" };
+    }
     const q = `Latest mandi prices for ${intent.commodity ?? "the commodity"}${intent.district ? ` near ${intent.district}` : ""}${intent.state_code ? ` in ${stateByCode(intent.state_code).name}` : ""}`;
     const x = await extractFromMarkdown<Record<string, unknown>>({ markdown: md, schemaHint: PRICE_HINT, question: q, purpose: "extract_price" });
     if (x && Array.isArray(x.prices) && x.prices.length) return { data: x, status: "ok" };
@@ -234,7 +267,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     const urls = urlPlan.get(`${scheme.id}:${sub.task}`) ?? [];
     const ps = urls.map((u) => byUrl.get(u)).filter(Boolean) as FetchedPage[];
     const { data, status } = await extractSection(scheme, sub, ps, intent);
-    const sec: Section = { ...base, status, data, sources: ps.filter((p) => p.text).map((p) => p.final_url ?? p.url).concat(ps.length ? [] : [scheme.entry]), excerpt_sources: ps.map((p) => ({ url: p.url, title: p.title, cached: p.cached, error: p.error })) };
+    const sec: Section = { ...base, status, data, sources: ps.filter((p) => p.text).map((p) => shownUrl(p)).concat(ps.length ? [] : [scheme.entry]), excerpt_sources: ps.map((p) => ({ url: p.url, title: p.title, cached: p.cached, error: p.error })) };
     sections.push(sec);
     await emit("section", sec as unknown as Record<string, unknown>);
   }

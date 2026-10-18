@@ -31,6 +31,8 @@ export const cfg = {
   stepRateFallback: () => num("TINYFISH_STEP_RATE_USD", 0.016),
   monitorRateFallback: () => num("TINYFISH_MONITOR_RATE_USD", 0.005),
   browserRateFallback: () => num("TINYFISH_BROWSER_RATE_USD_PER_MIN", 0.002),
+  agentMode: () => (env("TINYFISH_AGENT_MODE") === "strict" ? "strict" : "default"),
+  sendMaxSteps: () => env("TINYFISH_SEND_MAX_STEPS") === "1",
   maxAgentSteps: () => num("LOKMITRA_MAX_AGENT_STEPS", 25),
   cacheTtlSec: () => num("LOKMITRA_FETCH_TTL_SECONDS", 6 * 3600),
   prefetchLimit: () => num("PREFETCH_LIMIT", 200),

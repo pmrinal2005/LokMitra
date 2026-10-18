@@ -225,13 +225,21 @@ export function heuristicIntent(text: string, hint: { language?: string | null; 
   const statusWords = /status|स्थिति|sthiti|approved|kist aayi|paisa aaya|my application|mera|meri|मेरा|मेरी|check my|installment|किस्त|kist/i;
   const deadlineWords = /last date|deadline|antim tithi|अंतिम तिथि|kab tak|circular|naya kya|नया क्या|new update|update/i;
   const subs: SubQuery[] = [];
+  // Task words are scoped to the clause that mentions the scheme, so "…PM-KISAN status, … Ayushman mein naya kya"
+  // does not turn every scheme into a "deadline" lookup.
+  const clauses = t.split(/[,;.?!\n।]+|\s+(?:aur|and|तथा|और|व)\s+/i).map((c) => c.trim()).filter(Boolean);
+  const scopeFor = (s: (typeof SCHEMES)[number]) => {
+    const own = clauses.filter((c) => s.keywords.test(c));
+    return own.length ? own.join(" , ") : t;
+  };
   for (const s of SCHEMES) {
     if (!s.keywords.test(t)) continue;
+    const scope = scopeFor(s);
     let task: TaskKind = "info";
     if (s.id === "mandi") task = "price";
     else if (s.id === "bhulekh") task = "land";
-    else if (deadlineWords.test(t) && !statusWords.test(t)) task = "deadline";
-    else if (statusWords.test(t) && s.statusUrl) task = "status";
+    else if (deadlineWords.test(scope) && !statusWords.test(scope)) task = "deadline";
+    else if (statusWords.test(scope) && s.statusUrl) task = "status";
     subs.push({ scheme_id: s.id, task, personal: task === "status" || task === "land", note: null });
   }
   if (commodity && !subs.some((s) => s.scheme_id === "mandi")) subs.push({ scheme_id: "mandi", task: "price", personal: false, note: null });
@@ -351,6 +359,7 @@ export function templateReport(sections: SectionInput[]): string {
       const elig = d.eligibility as string[] | undefined;
       if (Array.isArray(elig) && elig.length) lines.push(`- Eligibility: ${elig.slice(0, 4).join("; ")}`);
       const prices = d.prices as { market: string; modal_price?: string | null; unit?: string | null }[] | undefined;
+      if (d.typical_price) lines.push(`- Typical price: ${String(d.typical_price)}`);
       if (Array.isArray(prices)) prices.slice(0, 5).forEach((p) => lines.push(`- ${p.market}: ₹${p.modal_price ?? "?"} ${p.unit ?? ""}`));
       const ex = d.excerpt as string | undefined;
       if (ex) lines.push(`- From the official page: ${clip(ex, 260)}`);

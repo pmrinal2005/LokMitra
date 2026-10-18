@@ -96,6 +96,19 @@ export function seedLinks(scheme: SchemeDef, state: string, task: TaskKind): Dee
   return dedupeLinks(links);
 }
 
+const slug = (v: string) => v.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/** Live, bot-friendly mandi price pages (Agmarknet itself answers 403 to Fetch). State table + district overview. */
+export function priceLinks(state: string, ctx: { district?: string | null; commodity?: string | null }): DeepLink[] {
+  if (!ctx.commodity) return [];
+  const st = stateByCode(state);
+  const c = slug(ctx.commodity);
+  const out: DeepLink[] = [];
+  if (ctx.district) out.push({ url: `https://acrop.app/prices/${c}/${slug(st.name)}/${slug(ctx.district)}`, label: `${ctx.commodity} — ${ctx.district} mandis (AgMarkNet data)`, kind: "price" });
+  out.push({ url: `https://agriplus.in/prices/${c}/${slug(st.name)}`, label: `${ctx.commodity} — ${st.name} mandi table (AgMarkNet data)`, kind: "price" });
+  return out;
+}
+
 function dedupeLinks(links: DeepLink[]) {
   const seen = new Set<string>();
   return links.filter((l) => {
@@ -112,6 +125,7 @@ function rankHits(hits: SearchHit[], scheme: SchemeDef, state: string): SearchHi
   const score = (h: SearchHit) => {
     const host = hostOf(h.url);
     let s = 0;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return -100; // raw-IP mirrors are never citizen-facing sources
     if (scheme.domains.some((d) => host === d || host.endsWith(`.${d}`))) s += 10;
     if (stateHost && host === stateHost) s += 8;
     if (isGovHost(h.url)) s += 5;
@@ -142,7 +156,8 @@ export async function resolvePortal(
   const state = cacheState(scheme, ctx.state, task);
   // price is commodity-specific → deep links carry the commodity; keep it in a per-commodity task row via selectors
   const existing = await getPortal(state, scheme.id, task);
-  const commodityOk = task !== "price" || !ctx.commodity || (existing?.selectors as { commodity?: string } | undefined)?.commodity === ctx.commodity;
+  const exSel = (existing?.selectors ?? {}) as { commodity?: string; district?: string };
+  const commodityOk = task !== "price" || !ctx.commodity || (exSel.commodity === ctx.commodity && (exSel.district ?? null) === (ctx.district ?? null));
   if (existing && existing.deep_links?.length && commodityOk) {
     await recordHit(existing);
     return { row: { ...existing, hits: (existing.hits ?? 0) + 1 }, hit: true, searched: [] };
@@ -160,9 +175,11 @@ export async function resolvePortal(
   });
   const ranked = rankHits(hits, scheme, state).slice(0, task === "price" ? 4 : 3);
   const links = dedupeLinks([
+    ...(task === "deadline" ? seedLinks(scheme, state, task).slice(0, 1) : []), // the scheme's own portal carries the notices
+    ...(task === "price" ? priceLinks(state, ctx) : []),
     ...ranked.map((h) => ({ url: h.url, label: h.title || hostOf(h.url), kind: (task === "price" ? "price" : task === "deadline" ? "notice" : task === "land" ? "land" : "info") as DeepLink["kind"] })),
     ...seedLinks(scheme, state, task),
-  ]).slice(0, 5);
+  ]).slice(0, task === "price" ? 4 : 5);
 
   const row = await upsertPortal({
     state_code: state,
@@ -171,7 +188,7 @@ export async function resolvePortal(
     entry_url: task === "land" && st.land ? st.land : scheme.statusUrl && task === "status" ? scheme.statusUrl : scheme.entry,
     deep_links: links,
     nav_path: existing?.nav_path ?? [],
-    selectors: { ...(existing?.selectors ?? {}), ...(task === "price" && ctx.commodity ? { commodity: ctx.commodity } : {}) },
+    selectors: { ...(existing?.selectors ?? {}), ...(task === "price" && ctx.commodity ? { commodity: ctx.commodity, district: ctx.district ?? undefined } : {}) },
     source: existing?.source === "agent" ? "agent" : ranked.length ? "search" : "seed",
     last_verified_at: nowIso(),
   });

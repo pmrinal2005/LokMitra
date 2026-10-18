@@ -74,7 +74,7 @@ npm run build && npm start
 ### Verify every endpoint against real live data
 ```bash
 npm run verify:api                                   # free and read-only checks (wallet, runs, usage, monitors, profiles, Search, Fetch, overview)
-DECK_VERIFY_PAID=1 npm run verify:api                # also runs one small paid Agent SSE run (max 5 steps)
+DECK_VERIFY_PAID=1 npm run verify:api                # also runs one small paid Agent SSE run (60s wall-clock cap; max_steps is a TinyFish beta-gated field)
 npm run verify:api -- https://your-app.vercel.app    # check a deployed instance
 ```
 
@@ -116,3 +116,32 @@ scripts/     verify-endpoints.mjs
 - i18n of the full UI chrome (presets already include Devanagari)
 
 **Status:** ✅ builds cleanly (`next build`) · ✅ typechecks · ✅ 0 npm audit vulnerabilities · Last updated 2026-10-17
+
+
+---
+
+## Phase 0-3 completion notes (2026-10-18)
+
+**Live-verified against the real TinyFish API (wallet-balance diff, total spend < $1 of the $3 cap):**
+
+| Surface | Check | Result |
+|---|---|---|
+| Search (free) | `GET /api/tinyfish/search`, portal discovery in `resolvePortal` | live results (pmkisan.gov.in first) |
+| Fetch (free) | batched <=10 URLs, nightly `/api/cron/prefetch` | 20/26 official pages OK; 403 / unreachable pages reported per-URL, not fatal |
+| Agent | one-time `discover` (7 steps, $0.112), citizen-confirmed status run (10 steps, $0.16), parallel cross-check PM-KISAN + Ayushman (19 + 13 steps) | structured `output_schema` JSON, live `STREAMING_URL`; PM-KISAN correctly stops at `blocked_by: otp` |
+| Discover-Once | 2nd `discover` for the same state x scheme | **$0.00**, served from `portal_map` |
+| Browser | session create + delete, OTP relay profile create / save / delete | OK |
+| Monitor | create sentinel ($0.005 baseline), subscribe, run-now | OK, change-diff + fan-out path exercised |
+
+**Fixes made in this pass**
+- NLU keyword false positives (`ration` in *registration*, `rate` in *separate*, `beta` in *alphabet* ...): all Latin-script terms now use `\b` word boundaries, with plural forms preserved (`scholarships?`, `students?` ...). Devanagari terms are untouched.
+- Task detection is now scoped per clause, so "PM-KISAN status ..., Ayushman mein naya kya" no longer turns every scheme into a deadline lookup.
+- **Mandi prices now return real data.** Agmarknet answers 403 to Fetch and the eNAM dashboard is JS-only, so prices were always empty. `priceLinks()` adds bot-friendly pages built on AgMarkNet data (acrop.app district overview + agriplus.in state table) and a deterministic parser (`parsePriceTables`) fills `typical_price` + per-mandi min/max/modal without an LLM.
+- Excerpts no longer leak `## SOURCE` markers or portal boilerplate; raw-IP mirror hosts (e.g. `34.93.80.85`) are never ranked or shown to citizens.
+- `agent_config.mode:"strict"` and `max_steps` are **beta-gated** on TinyFish accounts (403 "join /beta"). They are now opt-in (`TINYFISH_AGENT_MODE=strict`, `TINYFISH_SEND_MAX_STEPS=1`); spend is bounded by `max_duration_seconds` + the wallet guard + `DECK_BUDGET_USD` instead.
+- `vercel.json` now declares the nightly cron (`/api/cron/prefetch`, `0 21 * * *` UTC = 02:30 IST).
+
+**Honest limitations**
+- Personal PM-KISAN status needs a real OTP on the citizen's phone; the agent stops at the OTP gate by design (`needs_otp`). Telegram, Resend, Groq and Supabase are optional integrations: without keys the deck degrades gracefully (heuristic NLU, in-memory store, documented in `/settings`). Add keys to enable them. `TINYFISH_API_KEY` is the only required variable.
+- With no Supabase configured, `portal_map` lives in server memory, so the "discover once" cache resets on cold start. Set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` and run `supabase/migrations/*.sql` for permanence on Vercel.
+- Vercel Cron is called with `Authorization: Bearer $CRON_SECRET`, so set `CRON_SECRET` in Vercel.

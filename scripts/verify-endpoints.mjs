@@ -97,7 +97,7 @@ if (PAID) {
     const r = await fetch(BASE + "/api/tinyfish/agent/run-sse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://www.india.gov.in/", goal: "Return the page title as JSON {\"title\": string}", agent_config: { max_steps: 5, max_duration_seconds: 90 } }),
+      body: JSON.stringify({ url: "https://www.india.gov.in/", goal: "Return the page title as JSON {\"title\": string}", agent_config: { max_duration_seconds: 60 } }),
     });
     need(r.ok && r.body, `HTTP ${r.status}`);
     const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = ""; const seen = new Set();

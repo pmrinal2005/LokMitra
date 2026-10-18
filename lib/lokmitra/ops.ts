@@ -263,10 +263,12 @@ export function agentBody(g: AgentGoal) {
     url: g.url,
     goal: g.goal,
     agent_config: {
-      mode: "strict",
+      // "strict" needs the TinyFish beta flag on the account; default mode works everywhere.
+      ...(cfg.agentMode() === "strict" ? { mode: "strict" } : {}),
       cursor_style: "fish",
-      max_steps: Math.min(g.max_steps ?? cfg.maxAgentSteps(), cfg.maxAgentSteps()),
-      max_duration_seconds: g.max_duration_seconds ?? (Number(process.env.TINYFISH_MAX_DURATION_SECONDS || 0) || 180),
+      // max_steps is beta-gated at TinyFish; by default the wall-clock cap below bounds spend instead.
+      ...(cfg.sendMaxSteps() ? { max_steps: Math.min(g.max_steps ?? cfg.maxAgentSteps(), cfg.maxAgentSteps()) } : {}),
+      max_duration_seconds: g.max_duration_seconds ?? (Number(process.env.TINYFISH_MAX_DURATION_SECONDS || 0) || 90),
     },
     capture_config: { screenshots: true },
     browser_profile: g.browser_profile ?? "stealth",
