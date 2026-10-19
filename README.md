@@ -19,8 +19,11 @@
 
 <br/>
 
+**🚀 LIVE PROJECT** · [`https://lokmitrabymrinal.vercel.app/`](https://lokmitrabymrinal.vercel.app/)
+<br>
+**🎥 DEMO VIDEO** · [`https://youtu.be/s-oDqKi11Ss`](https://youtu.be/s-oDqKi11Ss)
+<br>
 **📦 Repository** · [`github.com/pmrinal2005/LokMitra`](https://github.com/pmrinal2005/LokMitra)
-**🚀 Hosting** · [`https://lokmitrabymrinal.vercel.app/`](https://lokmitrabymrinal.vercel.app/)
 
 ---
 
