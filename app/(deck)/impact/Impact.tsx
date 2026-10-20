@@ -122,7 +122,7 @@ export function Impact() {
             <Kpi label="changes · 7d" value={s?.sentinels.changes_7d ?? 0} tone="amber" />
             <Kpi label="browser sessions" value={s?.sessions_live.browser_sessions ?? 0} />
             <Kpi label="OTP relays" value={s?.sessions_live.otp_relays ?? 0} tone="teal" />
-            <Kpi label="pending consents" value={s?.sessions_live.pending_confirms ?? 0} />
+            <Kpi label="live agent tasks" value={s?.sessions_live.pending_confirms ?? 0} />
           </div>
         </Panel>
 

@@ -60,7 +60,7 @@ export function Sessions() {
       />
 
       <div className="grid-4">
-        <Kpi label="pending confirmations" value={count("confirm")} sub="paid checks awaiting consent" tone="amber" />
+        <Kpi label="live agent tasks" value={count("confirm")} sub="auto-started checks (task sessions)" tone="amber" />
         <Kpi label="OTP relays" value={count("otp")} sub="citizen-controlled logins" tone="teal" />
         <Kpi label="live browsers" value={count("browser")} sub="Browser API / profile setup" />
         <Kpi label="ephemeral profiles" value={eprofs.filter((p) => !p.deleted_at).length} sub={`${eprofs.filter((p) => p.deleted_at).length} already deleted`} tone="jade" />

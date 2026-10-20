@@ -14,7 +14,7 @@ export type JourneyEvent =
   | { type: "stage"; stage: string; message: string }
   | { type: "search"; scheme: string; results: number; host?: string; error?: string | null; state?: string }
   | { type: "fetch"; ok: number; total: number; hosts: string[] }
-  | { type: "consent"; scheme: string; host: string; decision: "asked" | "allowed" | "denied" }
+  | { type: "task"; scheme: string; host: string; auto: boolean }
   | { type: "agent"; phase: "start" | "stream" | "step" | "done" | "error"; scheme: string; host?: string; run_id?: string | null; streaming_url?: string | null; text?: string; ok?: boolean; steps?: number; cost_usd?: number }
   | { type: "otp"; phase: "start" | "saved" | "closed"; scheme: string }
   | { type: "report"; report_id: string; sections: number; elapsed_ms?: number };

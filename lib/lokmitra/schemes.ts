@@ -444,7 +444,7 @@ export function stateByCode(code: string | null | undefined) {
   return STATES.find((s) => s.code === code) ?? STATES[0];
 }
 
-/** Typical Agent step count (informational estimate shown with the consent prompt — never a limit). */
+/** Typical Agent step count (informational estimate only — never a limit). */
 export function estimateSteps(task: TaskKind): number {
   if (task === "status") return 12;
   if (task === "land") return 14;

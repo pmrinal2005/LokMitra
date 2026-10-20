@@ -2,28 +2,34 @@
 /**
  * useJourney — the citizen's Sahayak journey as one state machine.
  *
- *   idle → understanding → searching → fetching → (consent) → (agent) → report → idle
+ *   idle → understanding → searching → fetching → (live agents, in parallel) → report → idle
  *
- *  - ask(text)            POST /api/lokmitra/ask (SSE): stage · intent · search · fetch · section · confirm_required · structured · report
- *  - consent gates        every `section.confirm` becomes a pending consent request; nothing paid runs without allow()
- *  - allow(id, ids)       POST /api/lokmitra/confirm (SSE): stage · agent(STARTED/STREAMING_URL/PROGRESS) · result
- *  - deny(id)             records the decision; the DIY link stays available
- *  - OTP relay            when the agent reports needs_otp (or the portal is OTP-gated) → otpStart(); after the
- *                         citizen logs in, otpSaved(relayId) re-runs the check with the saved Browser Context Profile
+ *  - ask(text)            POST /api/lokmitra/ask (SSE): stage · intent · search · fetch · section · agent_task · structured · report
+ *  - Agent = auto / live  every `agent_task` starts a live TinyFish Agent immediately (parallel, no consent modal / gate).
+ *                         If a required identifier is missing the task shows a purely operational input and starts the
+ *                         moment it is submitted (submitFields).
+ *  - live streaming       POST /api/lokmitra/confirm (SSE): stage · agent(STARTED/STREAMING_URL/PROGRESS) · result →
+ *                         steps, live cost (steps × step rate), streaming_url and video_url flow into the UI
+ *  - OTP relay            when the agent reports needs_otp → relay panel; after the citizen logs in, otpSaved(relayId)
+ *                         re-runs the check with the saved Browser Context Profile
  *  - every step is mirrored to the deck bus ("journey" events) → terminal, porthole and map react live
- *  - the last finished report id is persisted (localStorage) so the journey resumes after a reload
+ *  - nothing is resumed after a reload: every question is a full live execution
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { citizenId, hostOf, ssePost } from "@/lib/client";
 import { bus } from "@/lib/bus";
 import type { StructuredReport } from "@/lib/lokmitra/report-shape";
 
-export type StageId = "listen" | "understand" | "search" | "fetch" | "consent" | "agent" | "report";
-export const STAGES: StageId[] = ["listen", "understand", "search", "fetch", "consent", "agent", "report"];
+export type StageId = "listen" | "understand" | "search" | "fetch" | "agent" | "report";
+export const STAGES: StageId[] = ["listen", "understand", "search", "fetch", "agent", "report"];
 export type StageState = "todo" | "active" | "done" | "skipped" | "error" | "waiting";
 
-export interface ConsentReq {
-  confirm_id: string;
+export interface AgentTask {
+  confirm_id: string; // task handle (server-side session) — not a consent gate
+  report_id: string | null;
+  ready: boolean;
+  needs_input: boolean; // required identifier missing → purely operational input shown
+  started: boolean;
   scheme_id: string;
   scheme_name: string;
   task: "status" | "land";
@@ -33,7 +39,6 @@ export interface ConsentReq {
   est_cost_usd: number;
   requires_otp: boolean | null;
   fields: { key: string; label: string; provided: boolean }[];
-  decision: "pending" | "allowed" | "denied";
 }
 
 export interface AgentRun {
@@ -48,6 +53,8 @@ export interface AgentRun {
   status: string | null;
   result: Record<string, unknown> | null;
   cost_usd: number;
+  step_rate: number;
+  video_url: string | null;
   error: string | null;
   needs_otp: boolean;
   needs_captcha: boolean;
@@ -73,9 +80,9 @@ export interface JourneyState {
   messages: string[]; // server stage messages (English, short)
   searches: { scheme: string; results: number; host: string; error?: string | null }[];
   pages: { url: string; host: string; ok: boolean; title: string | null; latency_ms: number | null }[];
-  consents: ConsentReq[];
+  tasks: AgentTask[];
   agents: Record<string, AgentRun>;
-  otpFor: string | null; // confirm_id whose OTP relay panel is open
+  otpFor: string | null; // task id whose OTP relay panel is open
   report: JourneyReport | null;
   error: string | null;
   startedAt: number | null;
@@ -89,7 +96,7 @@ const fresh = (): JourneyState => ({
   messages: [],
   searches: [],
   pages: [],
-  consents: [],
+  tasks: [],
   agents: {},
   otpFor: null,
   report: null,
@@ -98,12 +105,12 @@ const fresh = (): JourneyState => ({
   finishedAt: null,
 });
 
-const LAST = "lm-journey-last";
-
 export function useJourney(opts: { lang: string; stateCode?: string; district?: string; channel?: "web" | "csc" }) {
   const [s, setS] = useState<JourneyState>(fresh);
   const abortRef = useRef<AbortController | null>(null);
   const agentAbort = useRef<Record<string, AbortController>>({});
+  const startRef = useRef<(c: AgentTask, ids: Record<string, string>) => void>(() => {});
+  const startTask = (c: AgentTask, ids: Record<string, string>) => startRef.current(c, ids);
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
@@ -113,23 +120,24 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
     const idx = STAGES.indexOf(id);
     const st = { ...x.stages };
     STAGES.slice(0, idx).forEach((k) => {
-      if (st[k] === "active" || st[k] === "todo") st[k] = k === "consent" || k === "agent" ? "skipped" : "done";
+      if (st[k] === "active" || st[k] === "todo") st[k] = k === "agent" ? "skipped" : "done";
     });
     return { ...x, stages: st };
   };
 
-  /** Re-derive the overall phase from consents + agents once the report has arrived. */
+  /** Re-derive the overall phase from tasks + agents. */
   const settle = (x: JourneyState): JourneyState => {
-    const pending = x.consents.some((c) => c.decision === "pending");
+    const waitingInput = x.tasks.some((c) => c.needs_input && !c.started);
     const running = Object.values(x.agents).some((a) => a.running);
     const otp = !!x.otpFor;
     const st = { ...x.stages };
-    if (x.consents.length) st.consent = pending ? "waiting" : x.consents.some((c) => c.decision === "allowed") ? "done" : "skipped";
     const runs = Object.values(x.agents);
-    if (runs.length) st.agent = running ? "active" : otp ? "waiting" : runs.some((a) => a.error && !a.result) ? "error" : "done";
-    else if (!pending) st.agent = st.agent === "todo" ? "skipped" : st.agent;
+    if (runs.length) st.agent = running ? "active" : otp || waitingInput ? "waiting" : runs.some((a) => a.error && !a.result) ? "error" : "done";
+    else if (waitingInput) st.agent = "waiting";
+    else if (x.tasks.length) st.agent = "active";
+    else st.agent = st.agent === "todo" ? "skipped" : st.agent;
     if (x.report) st.report = "done";
-    const phase: JourneyState["phase"] = x.error && !x.report ? "error" : running ? "working" : pending || otp ? "waiting" : x.report ? "done" : x.phase;
+    const phase: JourneyState["phase"] = x.error && !x.report ? "error" : running ? "working" : waitingInput || otp ? "waiting" : x.report ? "done" : x.phase;
     return { ...x, stages: st, phase, finishedAt: phase === "done" ? x.finishedAt ?? Date.now() : x.finishedAt };
   };
 
@@ -157,7 +165,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 let y = { ...x, messages: [...x.messages, msg].slice(-12) };
                 if (st === "search") y = stage(finishStagesBefore(y, "search"), "search", "active");
                 else if (st === "fetch") y = stage(finishStagesBefore(y, "fetch"), "fetch", "active");
-                else if (st === "confirm") y = stage(y, "consent", "waiting");
+                else if (st === "agent") y = stage(finishStagesBefore(y, "agent"), "agent", "active");
                 else if (st === "synthesis" || st === "translate") y = stage(finishStagesBefore(y, "report"), "report", "active");
                 return y;
               });
@@ -169,9 +177,15 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
               const pages = ((data.pages as { url: string; title: string | null; chars: number; latency_ms?: number | null; error: string | null }[]) ?? []).map((p) => ({ url: p.url, host: hostOf(p.url), ok: !p.error && p.chars > 0, title: p.title, latency_ms: p.latency_ms ?? null }));
               bus.emit("journey", { type: "fetch", ok: pages.filter((p) => p.ok).length, total: pages.length, hosts: [...new Set(pages.map((p) => p.host))] });
               patch((x) => stage({ ...x, pages }, "fetch", "done"));
-            } else if (event === "confirm_required") {
-              const c: ConsentReq = {
+            } else if (event === "agent_task") {
+              const fields = (data.fields as AgentTask["fields"]) ?? [];
+              const ready = data.ready === true && fields.every((f) => f.provided);
+              const c: AgentTask = {
                 confirm_id: String(data.confirm_id),
+                report_id: data.report_id ? String(data.report_id) : null,
+                ready,
+                needs_input: !ready,
+                started: false,
                 scheme_id: String(data.scheme_id),
                 scheme_name: String(data.scheme_name),
                 task: data.task === "land" ? "land" : "status",
@@ -180,11 +194,12 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 est_steps: Number(data.est_steps ?? 0),
                 est_cost_usd: Number(data.est_cost_usd ?? 0),
                 requires_otp: (data.requires_otp as boolean | null) ?? null,
-                fields: (data.fields as ConsentReq["fields"]) ?? [],
-                decision: "pending",
+                fields,
               };
-              bus.emit("journey", { type: "consent", scheme: c.scheme_name, host: c.host, decision: "asked" });
-              patch((x) => stage({ ...x, consents: [...x.consents.filter((y) => y.confirm_id !== c.confirm_id), c] }, "consent", "waiting"));
+              bus.emit("journey", { type: "task", scheme: c.scheme_name, host: c.host, auto: ready });
+              patch((x) => settle(stage({ ...x, tasks: [...x.tasks.filter((y) => y.confirm_id !== c.confirm_id), c] }, "agent", ready ? "active" : "waiting")));
+              // Agent = auto / live: start immediately, in parallel with the rest of the pipeline
+              if (ready) startTask(c, {});
             } else if (event === "report") {
               const r: JourneyReport = {
                 report_id: String(data.report_id),
@@ -197,9 +212,6 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 live_calls: data.live_calls as JourneyReport["live_calls"],
               };
               bus.emit("journey", { type: "report", report_id: r.report_id, sections: r.structured?.sectors.reduce((a, b) => a + b.items.length, 0) ?? 0, elapsed_ms: r.elapsed_ms });
-              try {
-                localStorage.setItem(LAST, JSON.stringify({ report_id: r.report_id, question: q, at: Date.now() }));
-              } catch {}
               patch((x) => settle(finishStagesBefore({ ...x, report: r }, "report")));
               window.dispatchEvent(new CustomEvent("lm-report", { detail: r.report_id }));
             } else if (event === "error") {
@@ -217,22 +229,22 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
     [patch],
   );
 
-  /* ---------------- consent → live agent ---------------- */
+  /* ---------------- live agent (auto-started) ---------------- */
   const runAgent = useCallback(
-    async (c: ConsentReq, identifiers: Record<string, string>, relayId?: string, overrideConfirmId?: string) => {
+    async (c: AgentTask, identifiers: Record<string, string>, relayId?: string, overrideConfirmId?: string) => {
       const key = c.confirm_id;
       const ctrl = new AbortController();
       agentAbort.current[key] = ctrl;
-      const base: AgentRun = { confirm_id: key, scheme_name: c.scheme_name, host: c.host, running: true, run_id: null, streaming_url: null, steps: 0, log: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], status: null, result: null, cost_usd: 0, error: null, needs_otp: false, needs_captcha: false, retry_confirm_id: null, relay_id: relayId ?? null };
-      patch((x) => settle(stage({ ...x, agents: { ...x.agents, [key]: base }, otpFor: x.otpFor === key ? null : x.otpFor }, "agent", "active")));
+      const base: AgentRun = { confirm_id: key, scheme_name: c.scheme_name, host: c.host, running: true, run_id: null, streaming_url: null, steps: 0, step_rate: 0, video_url: null, log: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], status: null, result: null, cost_usd: 0, error: null, needs_otp: false, needs_captcha: false, retry_confirm_id: null, relay_id: relayId ?? null };
+      patch((x) => settle(stage({ ...x, tasks: x.tasks.map((y) => (y.confirm_id === key ? { ...y, started: true, needs_input: false } : y)), agents: { ...x.agents, [key]: base }, otpFor: x.otpFor === key ? null : x.otpFor }, "agent", "active")));
       bus.emit("journey", { type: "agent", phase: "start", scheme: c.scheme_name, host: c.host });
       const up = (f: (a: AgentRun) => AgentRun) => patch((x) => (x.agents[key] ? { ...x, agents: { ...x.agents, [key]: f(x.agents[key]) } } : x));
       try {
         await ssePost(
           "/api/lokmitra/confirm",
-          { confirm_id: overrideConfirmId ?? key, identifiers, report_id: s.report?.report_id, relay_id: relayId },
+          { confirm_id: overrideConfirmId ?? key, identifiers, report_id: c.report_id ?? undefined, relay_id: relayId },
           ({ event, data }) => {
-            if (event === "stage") up((a) => ({ ...a, log: [...a.log, String(data.message)].slice(-30) }));
+            if (event === "stage") up((a) => ({ ...a, step_rate: Number(data.step_rate_usd ?? a.step_rate), log: [...a.log, String(data.message)].slice(-30) }));
             else if (event === "agent") {
               const type = String(data.type ?? "");
               if (type === "STARTED") up((a) => ({ ...a, run_id: String(data.run_id ?? "") || a.run_id }));
@@ -242,7 +254,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
               }
               if (type === "PROGRESS") {
                 const txt = String(data.purpose ?? data.action ?? "step");
-                up((a) => ({ ...a, steps: a.steps + 1, log: [...a.log, `▶ ${txt}`].slice(-30) }));
+                up((a) => ({ ...a, steps: a.steps + 1, cost_usd: (a.steps + 1) * a.step_rate, log: [...a.log, `▶ ${txt}`].slice(-30) }));
                 bus.emit("journey", { type: "agent", phase: "step", scheme: c.scheme_name, text: txt });
               }
             } else if (event === "result") {
@@ -255,6 +267,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 result: (data.result as Record<string, unknown>) ?? {},
                 steps: Number(data.steps ?? a.steps),
                 cost_usd: Number(data.cost_usd ?? 0),
+                video_url: (data.video_url as string) ?? null,
                 error: (data.error as string) ?? null,
                 needs_otp: !!data.needs_otp,
                 needs_captcha: !!data.needs_captcha,
@@ -264,7 +277,10 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
               if (data.needs_otp || data.needs_captcha) patch((x) => ({ ...x, otpFor: key }));
             } else if (event === "error") {
               const msg = String(data.error ?? data.message ?? "error");
+              const missing = Array.isArray(data.missing_fields) && data.missing_fields.length > 0;
               up((a) => ({ ...a, running: false, error: msg }));
+              // operational input still missing → hand the task back to its input form (nothing was spent)
+              if (missing) patch((x) => settle({ ...x, tasks: x.tasks.map((y) => (y.confirm_id === key ? { ...y, started: false, needs_input: true } : y)) }));
               bus.emit("journey", { type: "agent", phase: "error", scheme: c.scheme_name, text: msg });
             }
           },
@@ -279,40 +295,31 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
         up((a) => ({ ...a, running: false }));
         patch((x) => settle(x));
         delete agentAbort.current[key];
-        window.dispatchEvent(new CustomEvent("lm-report", { detail: s.report?.report_id ?? null }));
+        window.dispatchEvent(new CustomEvent("lm-report", { detail: c.report_id ?? null }));
       }
     },
-    [patch, s.report?.report_id],
+    [patch],
   );
 
-  const allow = useCallback(
+  /** Operational input only: the citizen supplies the missing identifier(s) and the live Agent starts at once. */
+  const submitFields = useCallback(
     (confirmId: string, identifiers: Record<string, string>) => {
-      const c = s.consents.find((x) => x.confirm_id === confirmId);
+      const c = s.tasks.find((x) => x.confirm_id === confirmId);
       if (!c) return;
-      bus.emit("journey", { type: "consent", scheme: c.scheme_name, host: c.host, decision: "allowed" });
-      patch((x) => ({ ...x, consents: x.consents.map((y) => (y.confirm_id === confirmId ? { ...y, decision: "allowed" } : y)) }));
       void runAgent(c, identifiers);
     },
-    [s.consents, patch, runAgent],
+    [s.tasks, runAgent],
   );
-
-  const deny = useCallback(
-    (confirmId: string) => {
-      const c = s.consents.find((x) => x.confirm_id === confirmId);
-      if (c) bus.emit("journey", { type: "consent", scheme: c.scheme_name, host: c.host, decision: "denied" });
-      patch((x) => settle({ ...x, consents: x.consents.map((y) => (y.confirm_id === confirmId ? { ...y, decision: "denied" } : y)) }));
-    },
-    [s.consents, patch],
-  );
+  startRef.current = (c, ids) => void runAgent(c, ids);
 
   /* ---------------- OTP relay ---------------- */
   const otpStart = useCallback(
     (confirmId: string) => {
-      const c = s.consents.find((x) => x.confirm_id === confirmId);
+      const c = s.tasks.find((x) => x.confirm_id === confirmId);
       if (c) bus.emit("journey", { type: "otp", phase: "start", scheme: c.scheme_name });
-      patch((x) => settle({ ...x, otpFor: confirmId, consents: x.consents.map((y) => (y.confirm_id === confirmId && y.decision === "pending" ? { ...y, decision: "allowed" } : y)) }));
+      patch((x) => settle({ ...x, otpFor: confirmId }));
     },
-    [s.consents, patch],
+    [s.tasks, patch],
   );
 
   /** The confirm id the relay should seed from (the agent's retry id if it ran already). */
@@ -320,19 +327,19 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
 
   const otpSaved = useCallback(
     (confirmId: string, relayId: string, identifiers: Record<string, string>) => {
-      const c = s.consents.find((x) => x.confirm_id === confirmId);
+      const c = s.tasks.find((x) => x.confirm_id === confirmId);
       if (!c) return;
       bus.emit("journey", { type: "otp", phase: "saved", scheme: c.scheme_name });
       const retry = s.agents[confirmId]?.retry_confirm_id ?? confirmId;
       patch((x) => ({ ...x, otpFor: null }));
       void runAgent(c, identifiers, relayId, retry);
     },
-    [s.consents, s.agents, patch, runAgent],
+    [s.tasks, s.agents, patch, runAgent],
   );
 
   const otpClose = useCallback(() => {
     patch((x) => {
-      const c = x.consents.find((y) => y.confirm_id === x.otpFor);
+      const c = x.tasks.find((y) => y.confirm_id === x.otpFor);
       if (c) bus.emit("journey", { type: "otp", phase: "closed", scheme: c.scheme_name });
       return settle({ ...x, otpFor: null });
     });
@@ -351,13 +358,8 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
     setS(fresh());
   }, []);
 
-  /** Restore the last finished report after a reload (no TinyFish call — reads our own store). */
-  const resume = useCallback((r: JourneyReport, question: string) => {
-    setS((x) => (x.phase !== "idle" ? x : settle({ ...fresh(), question, report: r, phase: "done", stages: Object.fromEntries(STAGES.map((k) => [k, k === "consent" || k === "agent" ? "skipped" : "done"])) as JourneyState["stages"], finishedAt: Date.now() })));
-  }, []);
-
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const activeStage: StageId | null = (STAGES.find((k) => s.stages[k] === "active" || s.stages[k] === "waiting") ?? null) as StageId | null;
-  return { s, activeStage, ask, allow, deny, otpStart, otpSaved, otpClose, relaySeed, cancel, reset, resume, lastKey: LAST };
+  return { s, activeStage, ask, submitFields, otpStart, otpSaved, otpClose, relaySeed, cancel, reset };
 }

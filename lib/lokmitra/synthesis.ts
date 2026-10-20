@@ -100,7 +100,7 @@ function nextStepsFor(items: ReportItem[], contradictions: Contradiction[]): Nex
   for (const it of items) {
     const a = it.agent;
     if (a?.blocked_by === "otp") add(`${it.scheme_name}: log in with the OTP sent to your registered mobile (LokMitra OTP relay) to finish the status check.`, 1, it.scheme_id, it.confirm?.entry_url);
-    if (it.status === "needs_confirmation" && it.confirm) add(`${it.scheme_name}: confirm the live personal check (a TinyFish agent runs on ${hostOf(it.confirm.entry_url)} right now) or check it yourself there.`, 2, it.scheme_id, it.confirm.entry_url);
+    if (it.status === "agent_live" && it.confirm) add(`${it.scheme_name}: a live TinyFish agent is checking ${hostOf(it.confirm.entry_url)} right now — share any missing details to let it finish, or check it yourself there.`, 2, it.scheme_id, it.confirm.entry_url);
     if (it.scheme_id === "pm-kisan" && it.verdict === "likely") add("PM-KISAN: make sure eKYC is complete (pmkisan.gov.in → eKYC with Aadhaar OTP, or biometric at a CSC) and your bank account is Aadhaar-seeded.", 2, it.scheme_id, "https://pmkisan.gov.in/");
     if (it.scheme_id === "pmfby" && it.verdict === "likely") add("PMFBY: enrol through your bank / CSC before the season cut-off; report crop loss within 72 hours on helpline 14447.", 3, it.scheme_id, "https://pmfby.gov.in/");
     if (it.scheme_id === "ayushman" && it.verdict !== "unlikely") add("Ayushman: check your name on beneficiary.nha.gov.in with mobile OTP and download the Ayushman card (or ask the Arogya Mitra at an empanelled hospital).", 3, it.scheme_id, "https://beneficiary.nha.gov.in/");
@@ -149,7 +149,7 @@ export async function buildReport(input: { query: string; intent: Intent; sectio
     for (const f of fc.filter((x) => x.status === "contradiction")) {
       contradictions.push({ kind: "guideline_vs_portal", scheme_id: s.scheme_id, scheme_name: s.scheme_name, label: f.label, guideline: f.canonical, portal: f.found ?? null, source: f.source ?? null, text: `${s.scheme_name} — ${f.label}: the guideline says ${f.canonical}, but ${f.source ? hostOf(f.source) : "the live page"} shows "${f.found}". ${f.snippet ? `(“${clip(f.snippet, 140)}”)` : ""}`.trim() });
     }
-    if (e.verdict === "unlikely" && (s.task === "status" || s.status === "needs_confirmation")) {
+    if (e.verdict === "unlikely" && (s.task === "status" || s.status === "agent_live")) {
       contradictions.push({ kind: "eligibility", scheme_id: s.scheme_id, scheme_name: s.scheme_name, label: "Eligibility", guideline: e.reasons[0] ?? "", portal: null, source: null, text: `${s.scheme_name}: you asked for your status, but by the published criteria you may not be eligible — ${e.reasons[0] ?? ""}` });
     }
   }
@@ -194,7 +194,7 @@ export async function buildReport(input: { query: string; intent: Intent; sectio
     sentinel,
     next_steps: nextStepsFor(items, contradictions),
     sources,
-    stats: { sections: items.length, live_sections: items.filter((i) => i.status !== "needs_confirmation").length, facts_confirmed: all.filter((f) => f.status === "confirmed").length, facts_contradicted: all.filter((f) => f.status === "contradiction").length },
+    stats: { sections: items.length, live_sections: items.filter((i) => i.status !== "agent_live").length, facts_confirmed: all.filter((f) => f.status === "confirmed").length, facts_contradicted: all.filter((f) => f.status === "contradiction").length },
     translation: { via: input.language === "en" ? "none" : "glossary", model: null, glossary_lang: glossaryLang(input.language) },
   };
   return report;

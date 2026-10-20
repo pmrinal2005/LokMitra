@@ -24,7 +24,7 @@ export interface DiscoveryResult {
  *  - discover(): a live Agent run that maps a gated portal's status checker RIGHT NOW
  *    (input fields, OTP/CAPTCHA, navigation). The result is returned to the caller and
  *    NOT stored — the next request maps the portal again, live.
- *  - runConfirmed(): citizen-consented status / land check (structured output_schema),
+ *  - runConfirmed(): auto-started live status / land check (structured output_schema, no consent gate),
  *    optionally using the citizen's own OTP-relay Browser Context Profile (use_profile +
  *    profile_id) so the single-use OTP login can be completed inside the same session.
  * Both are async generators so routes can tee the live TinyFish SSE events to the browser.
@@ -129,7 +129,7 @@ export async function* discover(opts: { scheme_id: string; state_code: string; t
 }
 
 /* ================================================================== */
-/* Citizen-confirmed status / land check                               */
+/* Live status / land check (auto-run, no consent gate)                */
 /* ================================================================== */
 interface ConfirmData extends Record<string, unknown> {
   scheme_id: string;
@@ -175,9 +175,18 @@ export async function* runConfirmed(
     }
   }
 
+  // Required identifiers are purely operational input: without them the portal cannot be queried, so the
+  // task waits (nothing is spent) until the citizen supplies them — it is never a consent prompt.
+  const required = task === "land" ? ["district", "tehsil", "village", "khasra_no"] : (scheme.statusIdentifiers ?? [{ key: "reg_no" }]).map((f) => f.key);
+  const missing = required.filter((k) => !ids[k]);
+  if (missing.length && !opts.relay_id) {
+    yield { type: "LM_ERROR", error: `Details needed before the live check can start: ${missing.join(", ")}`, missing_fields: missing, retryable: true };
+    return null;
+  }
+
   await sessions.patch<ConfirmData>(opts.confirm_id, { used: true });
   const r = await rates();
-  yield { type: "LM_STAGE", message: `Live run (no step limit) · typical ${c.data.est_steps} steps ≈ $${(c.data.est_steps * r.step).toFixed(3)} — shown for transparency only` };
+  yield { type: "LM_STAGE", message: `Live run started automatically · step rate $${r.step.toFixed(3)} (cost streams live) · typical ${c.data.est_steps} steps`, step_rate_usd: r.step };
 
   // portal located LIVE right now (never a stored path)
   let entry = c.data.entry_url;
@@ -212,11 +221,19 @@ export async function* runConfirmed(
   const result = (out.result && typeof out.result === "object" ? ((out.result as Row).result as Row) ?? out.result : null) as Record<string, unknown> | null;
   const blocked = (result?.blocked_by as string) ?? null;
   const reportId = opts.report_id || c.data.report_id;
-  if (reportId) {
-    const rep = await safe(db.one<Row>("benefit_reports", { eq: { id: reportId } }), null);
-    if (rep) {
-      const ar = Array.isArray(rep.agent_results) ? (rep.agent_results as unknown[]) : [];
-      await safe(db.update("benefit_reports", { id: reportId }, { agent_results: [...ar, { scheme_id: scheme.id, task, run_id: out.run_id, status: out.status, result, cost_usd: out.cost_usd, at: nowIso() }], cost_usd: Number(rep.cost_usd ?? 0) + out.cost_usd, updated_at: nowIso() }), []);
+  if (reportId) await attachAgentResult(reportId, { scheme_id: scheme.id, task, run_id: out.run_id, status: out.status, result, cost_usd: out.cost_usd, at: nowIso() });
+
+  // video recording of the run — the presigned URL can lag the COMPLETE event by a few seconds, so poll briefly
+  let video_url: string | null = null;
+  if (out.run_id) {
+    for (let i = 0; i < 4 && !video_url; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 2500));
+      try {
+        const run = await tf<TfRun>("agent", `/v1/runs/${out.run_id}`, { query: { screenshots: "none", html: "none" }, timeoutMs: 10_000 });
+        video_url = run.video_url ?? null;
+      } catch {
+        /* keep trying */
+      }
     }
   }
 
@@ -239,6 +256,8 @@ export async function* runConfirmed(
     cost_usd: out.cost_usd,
     steps: out.steps,
     streaming_url: out.streaming_url,
+    video_url,
+    step_rate_usd: r.step,
     needs_otp: needsOtp,
     needs_captcha: blocked === "captcha",
     profile_hint: out.profile_hint ?? null,
@@ -250,7 +269,35 @@ export async function* runConfirmed(
   return out;
 }
 
-/** Run several confirmed checks at once (PM-KISAN + Ayushman + NSP…) — multi-domain cross-verification. */
+
+/**
+ * Append an Agent result to the stored report. Agents now start automatically while the report is still being
+ * written, and several run in parallel — so wait briefly for the row and re-verify after writing to survive
+ * concurrent read-modify-write races.
+ */
+async function attachAgentResult(reportId: string, entry: Record<string, unknown>) {
+  for (let i = 0; i < 12; i++) {
+    const rep = await safe(db.one<Row>("benefit_reports", { eq: { id: reportId } }), null);
+    if (!rep) {
+      await new Promise((r) => setTimeout(r, 2500));
+      continue;
+    }
+    for (let k = 0; k < 4; k++) {
+      const cur = k === 0 ? rep : await safe(db.one<Row>("benefit_reports", { eq: { id: reportId } }), null);
+      if (!cur) return;
+      const ar = Array.isArray(cur.agent_results) ? (cur.agent_results as Record<string, unknown>[]) : [];
+      if (ar.some((x) => x.run_id && x.run_id === entry.run_id)) return;
+      await safe(db.update("benefit_reports", { id: reportId }, { agent_results: [...ar, entry], cost_usd: Number(cur.cost_usd ?? 0) + Number(entry.cost_usd ?? 0), updated_at: nowIso() }), []);
+      await new Promise((r) => setTimeout(r, 300 * (k + 1)));
+      const chk = await safe(db.one<Row>("benefit_reports", { eq: { id: reportId } }), null);
+      const now = Array.isArray(chk?.agent_results) ? (chk!.agent_results as Record<string, unknown>[]) : [];
+      if (now.some((x) => x.run_id === entry.run_id)) return;
+    }
+    return;
+  }
+}
+
+/** Run several live checks at once (PM-KISAN + Ayushman + NSP…) — multi-domain cross-verification. */
 export async function crossCheck(
   confirmIds: string[],
   onEvent: (idx: number, e: FlowEvent) => void | Promise<void>,

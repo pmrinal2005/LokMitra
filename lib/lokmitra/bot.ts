@@ -33,6 +33,8 @@ interface TgState extends Record<string, unknown> {
   values?: Record<string, string>;
   relay_id?: string;
   retry_confirm_id?: string;
+  /** further live checks still waiting for an identifier (collected one at a time) */
+  queue?: string[];
 }
 
 const stKey = (chat: string) => `tg_state_${chat}`.slice(0, 128);
@@ -93,7 +95,7 @@ const QUICK_TEXT: Record<string, string> = {
 const HELP = `<b>LokMitra </b> — your free sarkari-yojana helper.
 • Type or send a <b>voice note</b> in any Indian language.
 • Ask about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records, mandi prices…
-• Personal status checks need your consent — I always show the cost first and never submit anything.
+• Personal status checks run automatically as live TinyFish agent checks on the official portal — I never submit anything and I stream the live cost.
 Commands: /lang · /state · /alerts · /report · /email you@example.com · /help`;
 
 export async function handleUpdate(u: TgUpdate) {
@@ -186,11 +188,17 @@ async function runAsk(chat: string, userId: string, text: string, lang: string) 
   }
   const lc = res.live_calls;
   const footer = `\n\n<i>● Live: ${lc.search} TinyFish Search · ${lc.fetch_ok}/${lc.fetch_urls} pages fetched now · ${Math.round(res.elapsed_ms / 100) / 10}s</i>`;
-  const kb: InlineKb = [];
-  for (const s of res.sections) if (s.confirm) kb.push([{ text: `Check my ${s.scheme_name} live (TinyFish agent)`, callback_data: `cf:${s.confirm.confirm_id}`.slice(0, 64) }]);
-  if (kb.length) kb.push([{ text: "Not now", callback_data: "cx" }]);
-  kb.push(...reportKb(res.report_id));
+  const kb: InlineKb = [...reportKb(res.report_id)];
   await tgSend(chat, mdToTg(res.summary_local) + footer, { html: true, keyboard: kb });
+
+  /* Agent = auto / live: every personal check starts by itself, in parallel — no consent prompt.
+     Checks that already have their identifiers run right now; the others ask for the missing detail(s) one by one. */
+  const tasks = res.sections.filter((x) => x.confirm).map((x) => x.confirm!);
+  const ready = tasks.filter((c) => c.ready);
+  const waiting = tasks.filter((c) => !c.ready).map((c) => c.confirm_id);
+  const running = Promise.all(ready.map((c) => executeConfirmed(chat, userId, c.confirm_id, {}).catch((e: Error) => tgSend(chat, `${e.message}`))));
+  if (waiting.length) await startConfirmed(chat, userId, waiting[0], waiting.slice(1));
+  await running;
 }
 
 /* ---------------- settings / report / alerts / e-mail helpers ---------------- */
@@ -265,10 +273,6 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
     await setState(chat, { mode: "email", values: { report_id: rid } }, userId);
     return tgSend(chat, "Send the e-mail address for this report (or 'cancel').");
   }
-  if (data === "cx") {
-    await setState(chat, { mode: "idle" }, userId);
-    return tgSend(chat, "OK. No paid check was run.");
-  }
   if (data.startsWith("cf:")) return startConfirmed(chat, userId, data.slice(3));
   if (data.startsWith("sub:")) {
     await subscribe({ monitor_id: data.slice(4), user_id: userId, channel: "telegram" }).catch((e) => tgSend(chat, `${(e as Error).message}`));
@@ -304,18 +308,19 @@ async function onCallback(cb: NonNullable<TgUpdate["callback_query"]>) {
   }
 }
 
-async function startConfirmed(chat: string, userId: string, confirmId: string) {
+async function startConfirmed(chat: string, userId: string, confirmId: string, queue: string[] = []): Promise<unknown> {
   const c = await sessions.get<{ scheme_id: string; task: "status" | "land"; sealed: string }>(confirmId);
-  if (!c) return tgSend(chat, "This confirmation expired. Please ask again.");
+  if (!c) return tgSend(chat, "This live check expired. Please ask again.");
   const { unseal } = await import("./util");
   const have = unseal<Record<string, string>>(c.data.sealed) ?? {};
   const scheme = schemeById(c.data.scheme_id)!;
   const fields = c.data.task === "land" ? [{ key: "district", label: "District" }, { key: "tehsil", label: "Tehsil / Taluka" }, { key: "village", label: "Village" }, { key: "khasra_no", label: "Khasra / Survey / Gat number" }] : scheme.statusIdentifiers ?? [{ key: "reg_no", label: "Registration number" }];
   const pending = fields.filter((f) => !have[f.key]).map((f) => ({ key: f.key, label: f.label }));
   if (pending.length) {
-    await setState(chat, { mode: "collect", confirm_id: confirmId, pending, values: {} }, userId);
-    return tgSend(chat, `Please send your <b>${pending[0].label}</b>.\n<i>Used once for this check only; masked in logs.</i>`, { html: true });
+    await setState(chat, { mode: "collect", confirm_id: confirmId, pending, values: {}, queue }, userId);
+    return tgSend(chat, `The live ${scheme.name} check is ready — send your <b>${pending[0].label}</b> and it starts instantly.\n<i>Used once for this check only; masked in logs.</i>`, { html: true });
   }
+  if (queue.length) void startConfirmed(chat, userId, queue[0], queue.slice(1));
   return executeConfirmed(chat, userId, confirmId, {});
 }
 
@@ -327,12 +332,18 @@ async function onCollect(chat: string, userId: string, st: TgState, text: string
     return tgSend(chat, `${cur.label}: ${mask(text)}\nNow send your <b>${rest[0].label}</b>.`, { html: true });
   }
   await setState(chat, { mode: "idle" }, userId);
+  const next = st.queue ?? [];
+  if (next.length) void startConfirmed(chat, userId, next[0], next.slice(1)).catch((e) => tgSend(chat, `${(e as Error).message}`));
   return executeConfirmed(chat, userId, st.confirm_id!, values);
 }
 
-async function executeConfirmed(chat: string, userId: string, confirmId: string, ids: Record<string, string>, relayId?: string) {
-  await tgSend(chat, "TinyFish agent is starting on the official portal…");
+async function executeConfirmed(chat: string, userId: string, confirmId: string, ids: Record<string, string>, relayId?: string): Promise<unknown> {
+  const sc = await sessions.get<{ scheme_id: string }>(confirmId);
+  const label = sc ? schemeById(sc.data.scheme_id)?.name ?? "portal" : "portal";
+  await tgSend(chat, `TinyFish agent is live on the ${label} portal now…`);
   let liveSent = false;
+  let nSteps = 0;
+  let rate = 0;
   let final: Record<string, unknown> | null = null;
   const gen = runConfirmed({ confirm_id: confirmId, identifiers: ids, relay_id: relayId ?? null });
   while (true) {
@@ -343,6 +354,12 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
       liveSent = true;
       await tgSend(chat, "Watch the agent navigate live:", { keyboard: [[{ text: "▶ Live browser", url: e.streaming_url }]] });
     }
+    if (e.type === "LM_STAGE" && typeof e.step_rate_usd === "number") rate = e.step_rate_usd;
+    if (e.type === "PROGRESS") {
+      nSteps += 1;
+      if (nSteps % 4 === 0) await tgSend(chat, `<i>${label}: step ${nSteps} · live cost $${(nSteps * rate).toFixed(3)}</i>`, { html: true });
+    }
+    if (e.type === "LM_ERROR" && e.retryable && Array.isArray(e.missing_fields)) return startConfirmed(chat, userId, confirmId);
     if (e.type === "LM_ERROR") return tgSend(chat, `${e.error}\n\nDo it yourself:\n${((e.fallback as string[]) ?? []).map((x) => `• ${x}`).join("\n")}`);
     if (e.type === "LM_RESULT") final = e as Record<string, unknown>;
   }
@@ -357,6 +374,7 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
   const pend = Array.isArray(r.pending_actions) ? (r.pending_actions as string[]) : [];
   pend.slice(0, 4).forEach((p) => lines.push(`${p}`));
   lines.push(`\n<i>${final.steps} steps · $${Number(final.cost_usd).toFixed(3)} · run ${String(final.run_id ?? "").slice(0, 8)}</i>`);
+  if (typeof final.video_url === "string" && final.video_url) lines.push(`▶ <a href="${String(final.video_url).replace(/"/g, "&quot;")}">Run video</a>`);
   const user = await getUser(userId);
   let msg = lines.join("\n");
   if (user && user.language !== "en") {

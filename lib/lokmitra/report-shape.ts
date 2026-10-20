@@ -19,7 +19,7 @@ export interface ReportItem {
   scheme_name: string;
   task: string;
   sector: ReportSector;
-  status: string; // ok | partial | needs_confirmation | needs_otp | error | skipped
+  status: string; // ok | partial | agent_live | needs_otp | error | skipped
   verdict: Verdict;
   reasons: string[];
   reasons_local?: string[];
@@ -129,7 +129,7 @@ export function reportToMarkdown(r: StructuredReport, lang: string, opts: { loca
       if (reasons.length) out.push(`- ${L("why", lang)}: ${reasons.slice(0, 2).join(" ")}`);
       const fc = it.fact_check.filter((f) => f.status !== "not_stated");
       if (fc.length) out.push(`- ${L("fact_check", lang)}: ${fc.map((f) => `${f.label} ${f.status === "confirmed" ? "(confirmed)" : "(mismatch)"} ${factStatusLabel(f.status, lang)}`).join(" · ")}`);
-      if (it.status === "needs_confirmation" && it.confirm) out.push(`- ${L("s_needs_confirmation", lang)} (~${it.confirm.est_steps} steps ≈ $${it.confirm.est_cost_usd})`);
+      if (it.status === "agent_live" && it.confirm) out.push(`- ${L("s_agent_live", lang)} (~${it.confirm.est_steps} steps ≈ $${it.confirm.est_cost_usd})`);
       const diy = loc && it.diy_local?.length ? it.diy_local : it.diy;
       if (diy.length && (it.status !== "ok" || it.verdict === "check")) out.push(`- ${L("diy", lang)}: ${diy[0]}`);
     }
@@ -166,7 +166,7 @@ export function reportOneLiner(r: StructuredReport, lang: string) {
 
 export { host as reportHost };
 
-/** Overlay citizen-consented Agent results (added after the report was written) onto the structured report. */
+/** Overlay live Agent results (added after the report was written) onto the structured report. */
 export function overlayAgentResults(r: StructuredReport, agentResults: { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; cost_usd?: number }[] = []): StructuredReport {
   if (!agentResults.length) return r;
   const copy: StructuredReport = JSON.parse(JSON.stringify(r));

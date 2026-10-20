@@ -39,13 +39,50 @@ export function slipLink(id: string, base?: string) {
   return `${b}/report/${id}?t=${encodeURIComponent(slipToken(id))}`;
 }
 
+/**
+ * Client-supplied report fallback (e-mail button when the stored row is unreachable).
+ * The payload is untrusted: it is size-limited, shape-checked and reduced to the fields the e-mail renders.
+ * Returns null when it is not a usable report.
+ */
+export function sanitizeClientReport(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const p = raw as Record<string, unknown>;
+  try {
+    if (JSON.stringify(p).length > 400_000) return null;
+  } catch {
+    return null;
+  }
+  const id = typeof p.id === "string" && /^[0-9a-f-]{36}$/i.test(p.id) ? p.id : null;
+  if (!id) return null;
+  const str = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : "");
+  const structured = p.structured as StructuredReport | undefined;
+  const hasStructured = !!structured && structured.version === 1 && Array.isArray(structured.sectors);
+  const summary_en = str(p.summary_en, 20_000);
+  const summary_local = str(p.summary_local, 20_000);
+  if (!hasStructured && !summary_en && !summary_local) return null;
+  return {
+    id,
+    language: str(p.language, 8) || "en",
+    query: str(p.query, 2000),
+    summary_en,
+    summary_local,
+    structured: hasStructured ? structured : null,
+    sources: (Array.isArray(p.sources) ? p.sources : []).filter((u): u is string => typeof u === "string" && /^https?:\/\//.test(u)).slice(0, 20),
+    agent_results: [],
+    cost_usd: 0,
+    from_client: true,
+  };
+}
+
 export async function buildReportPayload(r: Record<string, unknown>, opts: { base?: string } = {}): Promise<ReportPayload> {
   const id = String(r.id);
   const lang = String(r.language ?? "en");
   const structured = structuredOf(r);
-  const token = slipToken(id);
-  const link = slipLink(id, opts.base);
-  const qr = /^https?:\/\//.test(link) ? await QRCode.toDataURL(link, { margin: 1, width: 200, errorCorrectionLevel: "M" }).catch(() => null) : null;
+  // a report that only exists client-side cannot be vouched for: no slip token, no verify-link, no QR
+  const unverified = r.from_client === true;
+  const token = unverified ? "" : slipToken(id);
+  const link = unverified ? "" : slipLink(id, opts.base);
+  const qr = !unverified && /^https?:\/\//.test(link) ? await QRCode.toDataURL(link, { margin: 1, width: 200, errorCorrectionLevel: "M" }).catch(() => null) : null;
   const subject = `LokMitra · ${L("title", lang)}${structured?.state_code ? ` · ${structured.state_code}` : ""} · #${id.slice(0, 8)}`;
   if (structured) {
     return {

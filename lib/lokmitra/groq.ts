@@ -72,19 +72,44 @@ function client(): Groq {
   return _client;
 }
 
-/** Live list of active model ids (cached 10 min) so retired ids are skipped instead of 404-ing. */
-let _models: { at: number; ids: Set<string> } | null = null;
+/**
+ * Live list of active model ids — fetched from Groq's /models endpoint on EVERY call (no cache),
+ * so retired ids are skipped instead of 404-ing. Returns null when the list is unreachable;
+ * callers then simply try the configured chain in order.
+ */
 export async function activeModels(): Promise<Set<string> | null> {
   if (!cfg.groqKey()) return null;
-  if (_models && Date.now() - _models.at < 600_000) return _models.ids;
   try {
     const r = await client().models.list();
     const ids = new Set((r.data ?? []).map((m) => m.id));
-    if (ids.size) _models = { at: Date.now(), ids };
     return ids.size ? ids : null;
   } catch {
     return null;
   }
+}
+
+/** Last-resort chain (heavy → mid → light) used whenever a chain would otherwise be empty. */
+export function defaultChain(): string[] {
+  return [...new Set([cfg.groqModelHeavy(), cfg.groqModelMid(), cfg.groqModelLight()].map(resolveModel).filter(Boolean))];
+}
+
+/**
+ * Build the ordered model chain for one call. It NEVER collapses to an empty list:
+ *   1. requested models (de-duplicated, aliases resolved, order preserved: heavy → mid → light)
+ *   2. when the live /models list is known, keep the ones that are live
+ *   3. if none of them are live, fall through the full configured chain heavy → mid → light
+ *      (each is still attempted sequentially — a stale /models answer must never block a call)
+ */
+export function buildModelChain(models: string[], live: Set<string> | null): string[] {
+  let list = [...new Set(models.filter(Boolean).map(resolveModel))];
+  if (!list.length) list = defaultChain();
+  if (live) {
+    const ok = list.filter((m) => live.has(m));
+    if (ok.length) return ok;
+    const fallback = defaultChain().filter((m) => live.has(m));
+    if (fallback.length) return fallback;
+  }
+  return list.length ? list : ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"];
 }
 
 function errStatus(e: unknown): number {
@@ -174,15 +199,10 @@ export async function chat(o: ChatOpts): Promise<string> {
   }
 }
 
-/** chat() with model fall-through (heavy → mid → light) — used by every call site. */
+/** chat() with sequential model fall-through (heavy → mid → light) — used by every call site. */
 async function chatChain(models: string[], o: Omit<ChatOpts, "model">): Promise<string> {
   let last: unknown;
-  let list = [...new Set(models.filter(Boolean).map(resolveModel))];
-  const live = await activeModels();
-  if (live) {
-    const ok = list.filter((m) => live.has(m));
-    list = ok.length ? ok : [...live].filter((m) => /gpt-oss-(120|20)b$/.test(m));
-  }
+  const list = buildModelChain(models, await activeModels());
   for (const m of list) {
     try {
       return await chat({ ...o, model: m });
@@ -399,11 +419,12 @@ export async function translate(text: string, target: string, opts: { source?: s
 
 /**
  * Translation chain models, in order: GROQ_MODEL_TRANSLATE (default qwen/qwen3.8-27b — Groq's id for the spec's qwen3-8b-27b),
- * then the light model, then gpt-oss-20b / 120b (retired ids are skipped via the live /models list). The first one that answers wins,
+ * then the light model, then gpt-oss-20b / 120b (retired ids are skipped via the live /models list, fetched fresh on every call). The first one that answers wins,
  * so a renamed/retired model id never breaks localisation.
  */
 export function translateModels() {
-  return [...new Set([cfg.groqModelTranslate(), cfg.groqModelLight(), cfg.groqModelMid(), cfg.groqModelHeavy()].map(resolveModel).filter(Boolean))];
+  const t = [...new Set([cfg.groqModelTranslate(), cfg.groqModelLight(), cfg.groqModelMid(), cfg.groqModelHeavy()].map(resolveModel).filter(Boolean))];
+  return t.length ? t : [...defaultChain()].reverse();
 }
 
 /** Batched translation of many short strings in ONE Groq call (JSON in / JSON out, order preserved). */
@@ -431,9 +452,8 @@ export async function translateBatch(texts: string[], target: string, opts: { pu
   for (const idxs of chunks) {
     const payload = Object.fromEntries(idxs.map((i, k) => [String(k), clean[i]]));
     let last: unknown;
-    const live = await activeModels();
-    const chain = live ? translateModels().filter((m) => live.has(m)) : translateModels();
-    for (const m of chain.length ? chain : translateModels()) {
+    const chain = buildModelChain(translateModels(), await activeModels());
+    for (const m of chain) {
       try {
         const raw = await chat({
           model: m,
@@ -482,7 +502,7 @@ export interface SectionInput {
   scheme_id: string;
   scheme_name: string;
   task: string;
-  status: "ok" | "partial" | "needs_confirmation" | "needs_otp" | "error" | "skipped";
+  status: "ok" | "partial" | "agent_live" | "needs_otp" | "error" | "skipped";
   data: unknown;
   sources: string[];
   diy: string[];
@@ -526,7 +546,7 @@ export function templateReport(sections: SectionInput[]): string {
     lines.push(`\n### ${s.scheme_name}`);
     if (s.benefit) lines.push(`- Benefit: ${s.benefit}`);
     const d = s.data as Record<string, unknown> | null;
-    if (s.status === "needs_confirmation") lines.push("- This check needs your registration details and a paid agent run — reply **CONFIRM** to proceed.");
+    if (s.status === "agent_live") lines.push("- A live TinyFish agent is checking this on the official portal right now — the result is added to your report as soon as it finishes.");
     else if (s.status === "needs_otp") lines.push("- The portal sent an OTP to your registered mobile. Please share it to continue.");
     else if (s.status === "error") lines.push("- We could not reach the official portal right now.");
     if (d && typeof d === "object") {

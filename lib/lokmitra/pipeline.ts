@@ -27,13 +27,22 @@ export interface Section extends SectionInput {
   /** every section is resolved live — kept as a literal so stored reports are self-describing */
   live: true;
   portal_state: string;
+  /** live Agent task planned for this section — started automatically by the channel (no consent gate) */
   confirm?: ConfirmPlan;
   search?: { query: string; results: number; error?: string | null; latency_ms: number };
   excerpt_sources?: { url: string; title: string | null; error?: string; latency_ms?: number | null }[];
 }
 
+/**
+ * A live Agent task. `confirm_id` is just the handle of the server-side task session (sealed identifiers,
+ * entry URL, report link) — it is NOT a consent gate: channels start the Agent automatically.
+ * `ready` = every required identifier is already known; otherwise the channel shows a purely
+ * operational input for the missing fields and starts the Agent the moment they are submitted.
+ */
 export interface ConfirmPlan {
   confirm_id: string;
+  report_id: string;
+  ready: boolean;
   scheme_id: string;
   scheme_name: string;
   task: "status" | "land";
@@ -136,9 +145,9 @@ async function extractSection(scheme: SchemeDef, sub: SubQuery, pages: FetchedPa
 }
 
 /* ------------------------------------------------------------------ */
-/* Confirmation gate for paid Agent work                               */
+/* Live Agent task planning (auto-run — no consent gate)               */
 /* ------------------------------------------------------------------ */
-async function planConfirm(scheme: SchemeDef, sub: SubQuery, intent: Intent, portalState: string, userId: string | null, identifiers: Record<string, string>, live: LivePortal | null): Promise<ConfirmPlan> {
+async function planAgentTask(scheme: SchemeDef, sub: SubQuery, intent: Intent, portalState: string, userId: string | null, identifiers: Record<string, string>, live: LivePortal | null, reportId: string): Promise<ConfirmPlan> {
   const task = sub.task === "land" ? "land" : "status";
   const steps = estimateSteps(task);
   const r = await rates();
@@ -158,13 +167,17 @@ async function planConfirm(scheme: SchemeDef, sub: SubQuery, intent: Intent, por
       est_steps: steps,
       sealed: seal(ids),
       language: intent.language,
+      report_id: reportId,
       created: nowIso(),
     },
     ttl,
     { user_id: userId },
   );
+  const fields = fieldsDef.map((f) => ({ key: f.key, label: f.label, provided: !!ids[f.key] }));
   return {
     confirm_id: sess.id,
+    report_id: reportId,
+    ready: fields.every((f) => f.provided),
     scheme_id: scheme.id,
     scheme_name: scheme.name,
     task,
@@ -172,7 +185,7 @@ async function planConfirm(scheme: SchemeDef, sub: SubQuery, intent: Intent, por
     est_steps: steps,
     est_cost_usd: Math.round(steps * r.step * 1000) / 1000,
     requires_otp: scheme.statusIdentifiers?.some((f) => /otp/i.test(f.label)) || null,
-    fields: fieldsDef.map((f) => ({ key: f.key, label: f.label, provided: !!ids[f.key] })),
+    fields,
     expires_at: sess.expires_at,
   };
 }
@@ -246,23 +259,25 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   const byUrl = new Map(pages.map((p) => [p.url, p]));
 
   /* ---- build sections ---- */
+  // the report id is fixed up-front so live Agent tasks (started automatically, in parallel) can attach their results to it
+  const report_id = uuid();
   const sections: Section[] = [];
   const pagesBySection = new Map<string, { url: string; text: string }[]>();
   for (const r of resolved) {
     const { sub, scheme } = r;
     const base = { scheme_id: scheme.id, scheme_name: scheme.name, task: sub.task, diy: scheme.diy, benefit: scheme.benefit, live: true as const, portal_state: r.portalState, search: r.search };
     if (isGated(sub)) {
-      await emit("stage", { stage: "confirm", message: `${scheme.name}: a personal ${sub.task} check runs a live TinyFish Agent on the portal — it needs your consent first.` });
-      const plan = await planConfirm(scheme, sub, intent, r.portalState, userId, intent.identifiers, r.live);
+      await emit("stage", { stage: "agent", message: `${scheme.name}: a personal ${sub.task} check — a live TinyFish Agent starts automatically on the portal.` });
+      const plan = await planAgentTask(scheme, sub, intent, r.portalState, userId, intent.identifiers, r.live, report_id);
       const sec: Section = {
         ...base,
-        status: "needs_confirmation",
+        status: "agent_live",
         data: { input_fields: null },
         sources: [plan.entry_url],
         confirm: plan,
       };
       sections.push(sec);
-      await emit("confirm_required", plan as unknown as Record<string, unknown>);
+      await emit("agent_task", plan as unknown as Record<string, unknown>);
       await emit("section", sec as unknown as Record<string, unknown>);
       continue;
     }
@@ -287,7 +302,6 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   await emit("structured", structured as unknown as Record<string, unknown>);
   const sources = [...new Set(sections.flatMap((s) => s.sources))].slice(0, 20);
   const live_calls = { search: resolved.length, fetch_urls: allUrls.length, fetch_ok: pages.filter((p) => p.text && !p.error).length };
-  const report_id = uuid();
   await safe(
     db.insert("benefit_reports", {
       id: report_id,
@@ -307,7 +321,6 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     }).catch(async () => db.insert("benefit_reports", { id: report_id, user_id: userId, language: replyLang, query: redact(text), intent: {}, sections: [], summary_en, summary_local, sources, live_calls, created_at: nowIso() })),
     [],
   );
-  for (const s of sections) if (s.confirm) await safe(sessions.patch(s.confirm.confirm_id, { report_id }), null);
   await safe(sessions.put("chat", { summary_en, report_id }, 3600 * 6, { id: `chat_${userId}`.slice(0, 128), user_id: userId }), null);
   void logRun({ surface: "llm", purpose: "report", state_code: intent.state_code, latency_ms: Date.now() - t0, meta: { sections: sections.length, via, lang: replyLang, channel: input.channel ?? "web", live_calls } });
 

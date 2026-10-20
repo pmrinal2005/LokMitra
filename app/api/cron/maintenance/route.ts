@@ -12,7 +12,7 @@ export const maxDuration = 300;
 /**
  * GET /api/cron/maintenance — Vercel Cron (Authorization: Bearer $CRON_SECRET), nightly 02:30 IST.
  * Privacy housekeeping only — there is NO pre-fetching / cache warm-up (LokMitra keeps no cache):
- *  1. purge expired ephemeral sessions (consent gates, OTP relays, chat context)
+ *  1. purge expired ephemeral sessions (agent task handles, OTP relays, chat context)
  *  2. delete expired OTP Browser Context Profiles at TinyFish (no long-term credential storage)
  *  3. optional SENTINEL_SWEEP=1: run-now every sentinel when no public webhook URL exists
  */

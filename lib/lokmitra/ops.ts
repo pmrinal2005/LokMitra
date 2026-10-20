@@ -193,7 +193,7 @@ export interface AgentOutcome {
   profile_hint?: AgentEvent["profile_hint"];
 }
 
-export function agentBody(g: AgentGoal) {
+export function agentBody(g: AgentGoal, opts: { recording?: boolean } = {}) {
   const body: Record<string, unknown> = {
     url: g.url,
     goal: g.goal,
@@ -206,7 +206,8 @@ export function agentBody(g: AgentGoal) {
       // functional wall-clock limit so a run fits inside one serverless request (not a cost cap)
       ...(g.max_duration_seconds || cfg.agentMaxDurationSec() ? { max_duration_seconds: g.max_duration_seconds ?? cfg.agentMaxDurationSec() } : {}),
     },
-    capture_config: { screenshots: true },
+    // recording → run `video_url` (streamed to the UI when the run ends). Account-gated: callers retry without it on HTTP 403.
+    capture_config: { screenshots: true, ...(opts.recording === false ? {} : { recording: true }) },
     browser_profile: g.browser_profile ?? "stealth",
   };
   if (g.output_schema) body.output_schema = g.output_schema;
@@ -233,7 +234,8 @@ export async function* run_agent_goal(g: AgentGoal, signal?: AbortSignal): Async
   let steps = 0;
   let logged = false;
   try {
-    const res = await tfRaw("agent", "/v1/automation/run-sse", { method: "POST", body: agentBody(g), accept: "text/event-stream", timeoutMs: 45_000, signal });
+    let res = await tfRaw("agent", "/v1/automation/run-sse", { method: "POST", body: agentBody(g), accept: "text/event-stream", timeoutMs: 45_000, signal });
+    if (res.status === 403) res = await tfRaw("agent", "/v1/automation/run-sse", { method: "POST", body: agentBody(g, { recording: false }), accept: "text/event-stream", timeoutMs: 45_000, signal });
     if (!res.ok || !res.body) {
       const txt = await res.text().catch(() => "");
       throw new TinyFishError(res.status, `HTTP_${res.status}`, clip(txt, 300) || res.statusText);

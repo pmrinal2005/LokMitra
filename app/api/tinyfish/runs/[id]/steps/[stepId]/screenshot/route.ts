@@ -17,7 +17,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; st
     }
     return new Response(res.body, {
       status: 200,
-      headers: { "Content-Type": res.headers.get("content-type") ?? "image/jpeg", "Cache-Control": "private, max-age=3600" },
+      headers: { "Content-Type": res.headers.get("content-type") ?? "image/jpeg", "Cache-Control": "no-store, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0" },
     });
   } catch (e) {
     return fail(e);

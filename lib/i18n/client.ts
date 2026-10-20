@@ -2,7 +2,8 @@
 /**
  * Client i18n helpers:
  *  - useT()      → { t, lang, setLang, native } — offline tables for 7 languages, Groq-localised
- *                  tables (cached in localStorage) for the other 16 via GET /api/lokmitra/localize.
+ *                  tables for the other 16 fetched LIVE on every language switch via GET /api/lokmitra/localize
+ *                  (translated strings are never cached in localStorage).
  *  - speak()     → browser SpeechSynthesis TTS in the citizen's language (no server, no cost).
  *  - relTime()   → localised "2 min ago" using Intl.RelativeTimeFormat.
  *  - localizeTexts() → POST /api/lokmitra/localize for free text (journey bubbles).
@@ -14,7 +15,6 @@ import { LANGUAGES, langByCode } from "@/lib/lokmitra/languages";
 
 const LANG_KEY = "lm-lang";
 const EVT = "lm-lang-change";
-const CACHE = (l: string) => `lm-ui-${l}-v1`;
 
 export function getLang(): string {
   try {
@@ -57,13 +57,9 @@ export function useT() {
     setTable(UI_STRINGS[uiLang(lang)]);
     setVia("offline");
     if (hasNativeUi(lang)) return;
+    // drop any translation cache written by older builds so nothing stale can ever be reused
     try {
-      const c = localStorage.getItem(CACHE(lang));
-      if (c) {
-        setTable({ ...UI_STRINGS.en, ...JSON.parse(c) });
-        setVia("groq");
-        return;
-      }
+      localStorage.removeItem(`lm-ui-${lang}-v1`);
     } catch {}
     setVia("loading");
     fetch(`/api/lokmitra/localize?lang=${encodeURIComponent(lang)}`, { cache: "no-store" })
@@ -72,11 +68,6 @@ export function useT() {
         if (!alive || !j.strings) return;
         setTable({ ...UI_STRINGS.en, ...j.strings });
         setVia(j.via === "groq" ? "groq" : "offline");
-        if (j.via === "groq") {
-          try {
-            localStorage.setItem(CACHE(lang), JSON.stringify(j.strings));
-          } catch {}
-        }
       })
       .catch(() => alive && setVia("offline"));
     return () => {

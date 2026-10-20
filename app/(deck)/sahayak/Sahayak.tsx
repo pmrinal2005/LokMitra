@@ -13,12 +13,18 @@ function cscUserId(name: string) {
   return n ? `csc:${n}` : citizenId().replace(/^web:/, "csc:");
 }
 
+/** Everything the server needs to render + send the report e-mail without reading the stored row. */
+function emailPayload(t: { q: string; report?: { report_id: string; summary_local: string; summary_en: string; language: string }; structured?: StructuredReport | null; sections: { scheme_id: string; scheme_name: string; task: string; status: string; sources: string[]; diy: string[] }[] }) {
+  const r = t.report!;
+  return { id: r.report_id, language: r.language, query: t.q, summary_en: r.summary_en, summary_local: r.summary_local, structured: t.structured ?? null, sources: [...new Set(t.sections.flatMap((s) => s.sources))].slice(0, 20), sections: t.sections.map((s) => ({ scheme_id: s.scheme_id, scheme_name: s.scheme_name, task: s.task, status: s.status, sources: s.sources, diy: s.diy })) };
+}
+
 interface Lang { code: string; name: string; native: string; speech: string; priority: boolean }
 interface St { code: string; name: string; hindi: string }
-interface Confirm { confirm_id: string; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
+interface Confirm { confirm_id: string; report_id?: string; ready?: boolean; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
 interface Section { scheme_id: string; scheme_name: string; task: string; status: string; data: Record<string, unknown> | null; sources: string[]; diy: string[]; live?: boolean; portal_state: string; search?: { query: string; results: number; error?: string | null; latency_ms: number }; confirm?: Confirm; benefit?: string }
 interface SearchEv { scheme: string; task: string; state: string; query?: string; results: number; top?: string[]; resolved_via?: string; latency_ms?: number; error?: string | null }
-interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean; needs_captcha?: boolean; relay_id?: string | null; cost_usd?: number }
+interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean; needs_captcha?: boolean; relay_id?: string | null; cost_usd?: number; step_rate?: number; video_url?: string | null; needs_input?: boolean }
 interface Turn {
   id: string;
   q: string;
@@ -136,7 +142,11 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
           else if (event === "intent") patchTurn(id, (t) => ({ ...t, intent: { intent: data.intent as Record<string, unknown>, via: String(data.via) } }));
           else if (event === "search") patchTurn(id, (t) => ({ ...t, searches: [...t.searches, data as unknown as SearchEv] }));
           else if (event === "fetch") patchTurn(id, (t) => ({ ...t, pages: (data.pages as Turn["pages"]) ?? [] }));
-          else if (event === "section") patchTurn(id, (t) => ({ ...t, sections: [...t.sections.filter((s) => !(s.scheme_id === data.scheme_id && s.task === data.task)), data as unknown as Section] }));
+          else if (event === "agent_task") {
+            const c = data as unknown as Confirm;
+            // Agent = auto / live: start immediately, in parallel (no consent step). Missing identifiers stay as plain inputs.
+            if (c.ready) void runConfirm(c, c.report_id);
+          } else if (event === "section") patchTurn(id, (t) => ({ ...t, sections: [...t.sections.filter((s) => !(s.scheme_id === data.scheme_id && s.task === data.task)), data as unknown as Section] }));
           else if (event === "structured") patchTurn(id, (t) => ({ ...t, structured: data as unknown as StructuredReport }));
           else if (event === "report") patchTurn(id, (t) => ({ ...t, report: data as unknown as Turn["report"], structured: (data.structured as StructuredReport | undefined) ?? t.structured }));
           else if (event === "error") patchTurn(id, (t) => ({ ...t, error: String(data.message ?? "error") }));
@@ -154,18 +164,18 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
 
   const runConfirm = async (c: Confirm, reportId?: string, relayId?: string, overrideConfirmId?: string) => {
     const key = c.confirm_id;
-    setRuns((r) => ({ ...r, [key]: { confirm_id: key, scheme_name: c.scheme_name, stages: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], streaming_url: null, steps: 0, result: null, running: true, relay_id: relayId ?? null } }));
+    setRuns((r) => ({ ...r, [key]: { confirm_id: key, scheme_name: c.scheme_name, stages: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], streaming_url: null, steps: 0, result: null, running: true, relay_id: relayId ?? null, step_rate: 0, cost_usd: 0, video_url: null, needs_input: false } }));
     const up = (f: (a: AgentRun) => AgentRun) => setRuns((r) => ({ ...r, [key]: f(r[key]) }));
     try {
       await ssePost("/api/lokmitra/confirm", { confirm_id: overrideConfirmId ?? key, identifiers: ids[key] ?? {}, report_id: reportId, relay_id: relayId }, ({ event, data }) => {
-        if (event === "stage") up((a) => ({ ...a, stages: [...a.stages, String(data.message)] }));
+        if (event === "stage") up((a) => ({ ...a, step_rate: Number(data.step_rate_usd ?? a.step_rate ?? 0), stages: [...a.stages, String(data.message)] }));
         else if (event === "agent") {
           const type = String(data.type ?? "");
           if (type === "STREAMING_URL" && data.streaming_url) up((a) => ({ ...a, streaming_url: String(data.streaming_url) }));
-          if (type === "PROGRESS") up((a) => ({ ...a, steps: a.steps + 1, stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
+          if (type === "PROGRESS") up((a) => ({ ...a, steps: a.steps + 1, cost_usd: (a.steps + 1) * (a.step_rate ?? 0), stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
           if (type === "STARTED") up((a) => ({ ...a, stages: [...a.stages, `run ${String(data.run_id ?? "").slice(0, 8)} started`] }));
-        } else if (event === "result") up((a) => ({ ...a, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `Done: ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
-        else if (event === "error") up((a) => ({ ...a, error: String(data.error ?? data.message ?? "error") }));
+        } else if (event === "result") up((a) => ({ ...a, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), video_url: (data.video_url as string) ?? null, stages: [...a.stages, `Done: ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
+        else if (event === "error") up((a) => ({ ...a, running: false, needs_input: Array.isArray(data.missing_fields) && data.missing_fields.length > 0, error: String(data.error ?? data.message ?? "error") }));
       });
     } catch (e) {
       up((a) => ({ ...a, error: (e as Error).message }));
@@ -174,35 +184,12 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
     }
   };
 
-  /** Parallel multi-domain verification: every pending gate of a turn in ONE request (/api/lokmitra/crosscheck). */
-  const crossCheck = async (t: Turn) => {
-    const gates = t.sections.map((s) => s.confirm).filter((c): c is Confirm => !!c && !runs[c.confirm_id]);
-    if (gates.length < 2) return;
-    for (const c of gates) setRuns((r) => ({ ...r, [c.confirm_id]: { confirm_id: c.confirm_id, scheme_name: c.scheme_name, stages: ["queued in parallel cross-check"], streaming_url: null, steps: 0, result: null, running: true } }));
-    const up = (key: string, f: (a: AgentRun) => AgentRun) => setRuns((r) => (r[key] ? { ...r, [key]: f(r[key]) } : r));
-    try {
-      await ssePost("/api/lokmitra/crosscheck", { confirm_ids: gates.map((g) => g.confirm_id), identifiers: Object.fromEntries(gates.map((g) => [g.confirm_id, ids[g.confirm_id] ?? {}])), report_id: t.report?.report_id }, ({ event, data }) => {
-        const key = String(data.confirm_id ?? "");
-        if (!key) return;
-        if (event === "stage") up(key, (a) => ({ ...a, stages: [...a.stages, String(data.message)] }));
-        else if (event === "agent") {
-          const type = String(data.type ?? "");
-          if (type === "STREAMING_URL" && data.streaming_url) up(key, (a) => ({ ...a, streaming_url: String(data.streaming_url) }));
-          if (type === "PROGRESS") up(key, (a) => ({ ...a, steps: a.steps + 1, stages: [...a.stages, `▶ ${String(data.purpose ?? data.action ?? "step")}`].slice(-40) }));
-        } else if (event === "result") up(key, (a) => ({ ...a, running: false, result: (data.result as Record<string, unknown>) ?? {}, steps: Number(data.steps ?? a.steps), error: (data.error as string) ?? null, retry_confirm_id: (data.retry_confirm_id as string) ?? null, needs_otp: !!data.needs_otp, needs_captcha: !!data.needs_captcha, cost_usd: Number(data.cost_usd ?? 0), stages: [...a.stages, `Done: ${data.status} · ${data.steps} steps · ${fmtUsd(Number(data.cost_usd ?? 0))}`] }));
-        else if (event === "error") up(key, (a) => ({ ...a, running: false, error: String(data.error ?? data.message ?? "error") }));
-      });
-    } catch (e) {
-      for (const g of gates) up(g.confirm_id, (a) => ({ ...a, error: a.error ?? (e as Error).message }));
-    } finally {
-      for (const g of gates) up(g.confirm_id, (a) => ({ ...a, running: false }));
-    }
-  };
-
-  const emailReport = async (reportId: string) => {
+  const emailReport = async (t: Turn) => {
+    const reportId = t.report!.report_id;
     setMailNote((m) => ({ ...m, [reportId]: "sending…" }));
     try {
-      await api(`/api/lokmitra/report/${reportId}/email`, { body: { to: email } });
+      // the full report payload travels with the request, so e-mail works even if the stored row is unreachable
+      await api(`/api/lokmitra/report/${reportId}/email`, { body: { to: email, payload: emailPayload(t) } });
       setMailNote((m) => ({ ...m, [reportId]: `sent to ${email}` }));
     } catch (e) {
       setMailNote((m) => ({ ...m, [reportId]: (e as Error).message }));
@@ -230,12 +217,12 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
         <div>
           <h1>{csc ? "CSC Sahayak Desk" : "LokMitra Sahayak"}</h1>
           <p>
-            Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Every question is answered live: TinyFish Search locates the official portal and Fetch reads it right now — nothing is cached, so repeat questions run in full again. Personal checks run a live TinyFish Agent only after your consent.
+            Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Every question is answered live: TinyFish Search locates the official portal and Fetch reads it right now — nothing is cached, so repeat questions run in full again. Personal checks start a live TinyFish Agent automatically (in parallel) and stream every step, the cost and the live browser here.
           </p>
         </div>
         <div className="row">
           <span className="chip live">● 100% live · no cache</span>
-          <span className="chip miss">Agent = on consent</span>
+          <span className="chip live">Agent = auto / live</span>
         </div>
       </header>
 
@@ -287,14 +274,6 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                 </div>
               )}
 
-              {t.sections.filter((s) => s.confirm && !runs[s.confirm.confirm_id]).length >= 2 && t.done && (
-                <div className="row gate-bar" style={{ marginTop: 12 }}>
-                  <span className="note"><Icon name="shuffle" /> {t.sections.filter((s) => s.confirm).length} personal checks found — run them side by side (parallel cross-verification).</span>
-                  <button className="btn sm paid" onClick={() => crossCheck(t)}>
-                    Run all live in parallel
-                  </button>
-                </div>
-              )}
               {t.sections.filter((s) => s.confirm).map((s) => {
                 const c = s.confirm!;
                 const run = runs[c.confirm_id];
@@ -302,26 +281,33 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                 return (
                   <div key={c.confirm_id} className="gate" style={{ marginTop: 12 }}>
                     <div className="row" style={{ justifyContent: "space-between" }}>
-                      <b><Icon name="lock" /> {c.scheme_name} — personal {c.task} check</b>
-                      <span className="chip live" title="Informational estimate only — there is no step limit or budget cap">● live agent · typically ~{c.est_steps} steps ≈ {fmtUsd(c.est_cost_usd)}</span>
+                      <b><Icon name="bot" /> {c.scheme_name} — personal {c.task} check</b>
+                      <span className="chip live" title="Live cost = steps × TinyFish step rate; there is no step limit or budget cap">● agent auto / live{run ? ` · ${run.steps} steps · ${fmtUsd(run.cost_usd ?? 0)}` : ""}</span>
                     </div>
                     <span className="note">
-                      A TinyFish agent will open <b>{hostOf(c.entry_url)}</b> live (portal located by a fresh Search right now) and read your status. It never submits anything. Your identifiers are used once, masked in logs.{c.requires_otp ? " This portal may send an OTP to your registered mobile." : ""}
+                      {run?.running ? <>A TinyFish agent is working on <b>{hostOf(c.entry_url)}</b> right now. </> : run ? null : c.ready ? <>Starting a TinyFish agent on <b>{hostOf(c.entry_url)}</b>… </> : <>Enter the detail(s) below — the live TinyFish agent on <b>{hostOf(c.entry_url)}</b> starts the moment you submit. </>}It never submits anything. Your identifiers are used once, masked in logs.{c.requires_otp ? " This portal may send an OTP to your registered mobile." : ""}
                     </span>
-                    <div className="field-grid">
-                      {c.fields.map((f) => (
-                        <label key={f.key}>
-                          <span className="label">{f.label}{f.provided ? <> <Icon name="check" size={11} /></> : null}</span>
-                          <input className="input" placeholder={f.provided ? "already provided" : f.label} value={v[f.key] ?? ""} onChange={(e) => setIds((m) => ({ ...m, [c.confirm_id]: { ...(m[c.confirm_id] ?? {}), [f.key]: e.target.value } }))} autoComplete="off" />
-                        </label>
-                      ))}
-                    </div>
-                    <div className="row">
-                      <button className="btn paid" disabled={!!run?.running || (!!run && !run.retry_confirm_id && !run.error)} onClick={() => runConfirm(c, t.report?.report_id, undefined, run?.retry_confirm_id ?? undefined)}>
-                        {run?.retry_confirm_id ? <><Icon name="refresh" /> Retry agent</> : <><Icon name="check-circle" /> Confirm &amp; run agent</>}
-                      </button>
-                      <a className="btn sm" href={c.entry_url} target="_blank" rel="noreferrer noopener">Do it myself ↗</a>
-                    </div>
+                    {(!run || run.needs_input) && !c.ready && (
+                      <form className="stack" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); void runConfirm(c, c.report_id ?? t.report?.report_id); }}>
+                        <div className="field-grid">
+                          {c.fields.filter((f) => !f.provided).map((f) => (
+                            <label key={f.key}>
+                              <span className="label">{f.label}</span>
+                              <input className="input" placeholder={f.label} value={v[f.key] ?? ""} onChange={(e) => setIds((m) => ({ ...m, [c.confirm_id]: { ...(m[c.confirm_id] ?? {}), [f.key]: e.target.value } }))} autoComplete="off" />
+                            </label>
+                          ))}
+                        </div>
+                        <div className="row">
+                          <button type="submit" className="btn paid" disabled={!!run?.running || !c.fields.filter((f) => !f.provided).every((f) => (v[f.key] ?? "").trim())}><Icon name="bot" /> Start live check</button>
+                          <a className="btn sm" href={c.entry_url} target="_blank" rel="noreferrer noopener">Do it myself ↗</a>
+                        </div>
+                      </form>
+                    )}
+                    {run && !run.running && !!run.retry_confirm_id && !run.needs_otp && !run.needs_captcha && (
+                      <div className="row">
+                        <button className="btn paid" onClick={() => runConfirm(c, c.report_id ?? t.report?.report_id, undefined, run.retry_confirm_id ?? undefined)}><Icon name="refresh" /> Retry live agent</button>
+                      </div>
+                    )}
                     {run && <AgentPanel run={run} onOtp={run.retry_confirm_id && !run.running && relayFor[c.confirm_id] === undefined ? () => setRelayFor((m) => ({ ...m, [c.confirm_id]: run.retry_confirm_id! })) : undefined} />}
                     {relayFor[c.confirm_id] && (
                       <RelayPanel
@@ -331,7 +317,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                         onSaved={(relayId) => {
                           const retry = relayFor[c.confirm_id]!;
                           setRelayFor((m) => ({ ...m, [c.confirm_id]: null }));
-                          void runConfirm(c, t.report?.report_id, relayId, retry);
+                          void runConfirm(c, c.report_id ?? t.report?.report_id, relayId, retry);
                         }}
                         onClosed={() => setRelayFor((m) => { const n = { ...m }; delete n[c.confirm_id]; return n; })}
                       />
@@ -379,7 +365,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                         <a className="btn sm" href={`/report/${t.report.report_id}`} target="_blank" rel="noreferrer"><Icon name="printer" /> Printable slip + QR</a>
                         <a className="btn sm" href={`/api/lokmitra/report/${t.report.report_id}/email?preview=1`} target="_blank" rel="noreferrer" title="Preview the structured HTML e-mail"><Icon name="eye" /> Email preview</a>
                         <input className="input" style={{ width: 200, padding: "6px 10px" }} placeholder="email@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                        <button className="btn sm" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)} onClick={() => emailReport(t.report!.report_id)}><Icon name="mail" /> Email</button>
+                        <button className="btn sm" disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)} onClick={() => emailReport(t)}><Icon name="mail" /> Email</button>
                         {mailNote[t.report.report_id] && <span className="note">{mailNote[t.report.report_id]}</span>}
                       </div>
                     )}
@@ -447,8 +433,11 @@ function AgentPanel({ run, onOtp }: { run: AgentRun; onOtp?: () => void }) {
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <span className="note">{run.running ? `TinyFish agent working… step ${run.steps}` : run.error ? "agent finished with an issue" : "agent finished"}</span>
-        {run.streaming_url && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ Watch live ↗</a>}
+        <span className="note">{run.running ? `TinyFish agent working… step ${run.steps} · ${fmtUsd(run.cost_usd ?? 0)} so far` : run.error ? "agent finished with an issue" : "agent finished"}</span>
+        <span className="row" style={{ gap: 6 }}>
+          {run.streaming_url && run.running && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ Watch live ↗</a>}
+          {run.video_url && !run.running && <a className="btn sm" href={run.video_url} target="_blank" rel="noreferrer noopener">▶ Run video ↗</a>}
+        </span>
       </div>
       {run.streaming_url && run.running && <iframe className="live-frame" src={run.streaming_url} title="Live TinyFish agent browser" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
       <div className="stage-list" style={{ maxHeight: 140, overflow: "auto" }}>{run.stages.map((s, i) => <span key={i}>{s}</span>)}</div>

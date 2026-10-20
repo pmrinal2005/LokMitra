@@ -356,14 +356,14 @@ export function useMission() {
           push(mk(e.ok ? "✓" : "⚠", e.ok ? "free" : "retry", `fetch » ${e.ok}/${e.total} official page(s) read live · ${e.hosts.slice(0, 4).join(", ")} · free`, e));
           if (e.ok) bus.emit("spark", { count: Math.min(e.ok, 5) });
           break;
-        case "consent":
-          push(mk(e.decision === "denied" ? "·" : "◆", e.decision === "allowed" ? "action" : "meta", `consent » ${e.scheme} on ${e.host}: ${e.decision}`, e));
+        case "task":
+          push(mk("◆", "action", `agent » ${e.scheme} on ${e.host}: ${e.auto ? "started automatically" : "waiting for required input"}`, e));
           break;
         case "agent": {
           const id = e.run_id ? e.run_id : `j-agent-${e.scheme}`;
           if (e.phase === "start") {
             setState({ running: true, runId: null, streamingUrl: null, host: e.host ?? "", step: 0, lastResult: null, status: "running" });
-            push(mk("◆", "meta", `GOAL » ${e.scheme} live check on ${e.host ?? "portal"} (citizen-consented)`, e));
+            push(mk("◆", "meta", `GOAL » ${e.scheme} live check on ${e.host ?? "portal"} (auto / live)`, e));
             bus.emit("fish", { type: "swim", id, target: classifyState(e.host ?? ""), persistent: true, color: "#2EF2C3" });
           } else if (e.phase === "stream") {
             setState((s) => ({ ...s, streamingUrl: e.streaming_url ?? s.streamingUrl, runId: e.run_id ?? s.runId }));

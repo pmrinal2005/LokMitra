@@ -19,7 +19,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; st
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Content-Security-Policy": "default-src 'none'; sandbox",
-        "Cache-Control": "private, max-age=3600",
+        "Cache-Control": "no-store, max-age=0",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     });
   } catch (e) {

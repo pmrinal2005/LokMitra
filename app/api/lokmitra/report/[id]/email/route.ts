@@ -2,7 +2,7 @@ import { cfg } from "@/lib/lokmitra/config";
 import { sendEmail } from "@/lib/lokmitra/email";
 import { bad, body, err, json, originOf } from "@/lib/lokmitra/http";
 import { getReport } from "@/lib/lokmitra/pipeline";
-import { buildReportPayload } from "@/lib/lokmitra/report-payload";
+import { buildReportPayload, sanitizeClientReport } from "@/lib/lokmitra/report-payload";
 import { rateLimit } from "@/lib/lokmitra/store";
 
 export const dynamic = "force-dynamic";
@@ -25,17 +25,30 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   return new Response(p.html.replace(/<body([^>]*)>/, `<body$1>${banner}`), { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
 }
 
-/** POST /api/lokmitra/report/:id/email { to } — Resend copy of the structured report (CSC operators / family). */
+/**
+ * POST /api/lokmitra/report/:id/email { to, payload? } — Resend copy of the structured report (CSC operators / family).
+ * The stored report row is preferred. When it is unreachable (memory store reset, Supabase down) the client sends the
+ * full report in `payload` and the e-mail is rendered + sent from that instead — so the button never dead-ends.
+ * Payload-based e-mails carry no slip token / verify link / QR (the server cannot vouch for client content).
+ */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   if (!validId(id)) return bad("invalid report id");
-  const { to } = await body<{ to?: string }>(req);
+  const { to, payload } = await body<{ to?: string; payload?: unknown }>(req);
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return bad("valid `to` e-mail required");
   const rl = await rateLimit(`email:${to}`, 1);
   if (!rl.ok) return err(Object.assign(new Error("too many e-mails, try later"), { status: 429 }));
-  const r = (await getReport(id)) as Record<string, unknown> | null;
-  if (!r) return err(Object.assign(new Error("report not found"), { status: 404 }));
+  let r = (await getReport(id)) as Record<string, unknown> | null;
+  let fromClient = false;
+  if (!r) {
+    const c = sanitizeClientReport(payload);
+    if (c && String(c.id).toLowerCase() === id.toLowerCase()) {
+      r = c;
+      fromClient = true;
+    }
+  }
+  if (!r) return err(Object.assign(new Error("report not found and no report payload supplied"), { status: 404 }));
   const p = await buildReportPayload(r, { base: cfg.publicBaseUrl() || originOf(req) });
   const res = await sendEmail({ to, subject: p.subject, html: p.html, text: p.text });
-  return res.id ? json({ sent: true, id: res.id, structured: !!p.structured }) : err(Object.assign(new Error(res.error ?? "send failed"), { status: res.error?.includes("not configured") ? 503 : 502 }));
+  return res.id ? json({ sent: true, id: res.id, structured: !!p.structured, source: fromClient ? "client_payload" : "stored_report" }) : err(Object.assign(new Error(res.error ?? "send failed"), { status: res.error?.includes("not configured") ? 503 : 502 }));
 }

@@ -8,9 +8,9 @@ export const maxDuration = 300;
 
 /**
  * POST /api/lokmitra/confirm { confirm_id, identifiers?, relay_id?, report_id? }
- * The citizen pressed CONFIRM on the gate → paid Agent status / land check with a strict
- * output_schema, live SSE tee (watch the agent via STREAMING_URL), optional Browser Context
- * Profile reuse from the OTP relay.
+ * Starts the live Agent status / land check for a task planned by /ask — called automatically by every
+ * channel (no consent gate). Strict output_schema, live SSE tee (steps, cost, STREAMING_URL, video_url),
+ * optional Browser Context Profile reuse from the OTP relay. `confirm_id` is only the task handle.
  */
 export async function POST(req: Request) {
   const b = await body<{ confirm_id?: string; identifiers?: Record<string, string>; relay_id?: string; report_id?: string }>(req);

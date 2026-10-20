@@ -9,7 +9,7 @@ export const maxDuration = 300;
 /**
  * POST /api/lokmitra/crosscheck { confirm_ids: string[≤5], identifiers?: { [confirm_id]: {key: value} }, report_id? }
  * Parallel multi-domain Agent verification (PM-KISAN + Ayushman + NSP … at once). Every event is
- * tagged with `idx` + `confirm_id` so the UI can route it to the right gate.
+ * tagged with `idx` + `confirm_id` so the UI can route it to the right task card.
  */
 export async function POST(req: Request) {
   const b = await body<{ confirm_ids?: string[]; identifiers?: Record<string, Record<string, unknown>>; report_id?: string }>(req);

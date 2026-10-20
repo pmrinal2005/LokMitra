@@ -832,7 +832,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .v-check { color: var(--ember); border-color: rgba(255,180,79,.45); background: rgba(255,180,79,.08); }
 .v-unlikely { color: var(--coral); border-color: rgba(255,92,122,.45); background: rgba(255,92,122,.08); }
 .v-na { color: var(--fog); border-color: var(--hair-strong); }
-.chip.st-error { color: var(--coral); } .chip.st-needs_confirmation, .chip.st-needs_otp { color: var(--ember); } .chip.st-ok { color: var(--jade); }
+.chip.st-error { color: var(--coral); } .chip.st-agent_live, .chip.st-needs_confirmation, .chip.st-needs_otp { color: var(--ember); } .chip.st-ok { color: var(--jade); }
 .rv-facts { margin: 0; display: grid; gap: 3px; }
 .rv-facts > div { display: grid; grid-template-columns: 96px 1fr; gap: 8px; font-size: 12.5px; }
 .rv-facts dt { color: var(--fog); font-family: var(--font-mono); font-size: 11px; }
@@ -931,7 +931,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .journey-chip.hit { color: var(--jade); border-color: rgba(110,242,160,.4); background: rgba(110,242,160,.07); }
 .journey-chip.err { color: var(--coral); border-color: rgba(255,92,122,.4); background: rgba(255,92,122,.07); }
 
-.journey-track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; }
+.journey-track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; }
 .jt-step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; min-width: 0; }
 .jt-dot { position: relative; z-index: 2; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: var(--surface-2); border: 1px solid var(--hair-strong); color: var(--fog); transition: all .5s var(--water); }
 .jt-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
@@ -973,14 +973,8 @@ html.calm .jt-step.active .jt-dot { animation: none; }
 .journey-input .textarea { min-height: 56px; font-size: 15px; }
 .journey-input-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
-.consent-scrim { position: fixed; inset: 0; z-index: 200; background: rgba(3,6,10,.72); backdrop-filter: blur(6px); display: grid; place-items: center; padding: 16px; animation: fadein .25s ease; }
-.consent-modal { width: min(560px, 100%); max-height: 90vh; overflow-y: auto; border-radius: 22px; padding: 22px; background: linear-gradient(160deg, rgba(28,34,48,.98), rgba(13,19,31,.98)); border: 1px solid rgba(255,159,67,.45); box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 60px rgba(255,159,67,.12); outline: none; display: flex; flex-direction: column; gap: 10px; }
-.consent-modal h3 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 18px; letter-spacing: .02em; }
-.consent-modal p { margin: 0; font-size: 14px; line-height: 1.55; }
-.consent-scheme { color: var(--fog); }
-.consent-fields { border: 1px solid var(--hair); border-radius: var(--radius-md); padding: 10px 12px 12px; display: grid; gap: 8px; margin: 0; }
-.consent-fields label { display: grid; gap: 4px; }
-.consent-actions { gap: 8px; margin-top: 4px; }
+.task-fields { border: 1px solid var(--hair); border-radius: var(--radius-md); padding: 10px 12px 12px; display: grid; gap: 8px; margin: 0; }
+.task-fields label { display: grid; gap: 4px; }
 @keyframes fadein { from { opacity: 0; } }
 
 .snap-body { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -1034,7 +1028,7 @@ html.calm .jt-step.active .jt-dot { animation: none; }
   .journey-chat { max-height: none; }
 }
 @media (max-width: 860px) {
-  .journey-track { grid-template-columns: repeat(7, minmax(44px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
+  .journey-track { grid-template-columns: repeat(6, minmax(44px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
   .jt-label { font-size: 9.5px; }
   .jt-dot { width: 30px; height: 30px; font-size: 13px; }
   .jt-bar { top: 15px; left: calc(50% + 17px); right: calc(-50% + 17px); }
@@ -1050,9 +1044,8 @@ html.calm .jt-step.active .jt-dot { animation: none; }
   .snap-kpi b { font-size: 20px; }
   .src-item { grid-template-columns: 22px minmax(0, 1fr); }
   .src-meta { grid-column: 2; flex-direction: row; align-items: center; justify-content: flex-start; }
-  .consent-modal { padding: 16px; }
 }
-@media print { .journey-input, .consent-scrim { display: none !important; } }
+@media print { .journey-input { display: none !important; } }
 
 /* ---------- professional SVG icon set (components/Icon.tsx) ---------- */
 :root { --icon-gap: 6px; }

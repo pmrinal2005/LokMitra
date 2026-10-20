@@ -1,21 +1,19 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useJourney, STAGES, type ConsentReq, type StageId, type JourneyReport } from "@/hooks/useJourney";
+import { useJourney, STAGES, type AgentTask, type StageId } from "@/hooks/useJourney";
 import { useT, speak, ttsSupported, relTime } from "@/lib/i18n/client";
-import { citizenId, fmtUsd } from "@/lib/client";
+import { fmtUsd } from "@/lib/client";
 import { langByCode } from "@/lib/lokmitra/languages";
 import { mdToHtml } from "@/lib/md";
 import { ReportView } from "./ReportView";
 import type { IconName } from "./Icon";
 import { RelayPanel } from "./RelayPanel";
 import type { UiKey } from "@/lib/i18n/ui-strings";
-import type { StructuredReport } from "@/lib/lokmitra/report-shape";
 import { Icon } from "./Icon";
 import { SahayakMascot } from "./SahayakMascot";
 
-const STAGE_KEY: Record<StageId, UiKey> = { listen: "st_listen", understand: "st_understand", search: "st_search", fetch: "st_fetch", consent: "st_consent", agent: "st_agent", report: "st_report" };
-const STAGE_ICON: Record<StageId, IconName> = { listen: "mic", understand: "brain", search: "search", fetch: "file", consent: "lock", agent: "bot", report: "clipboard" };
+const STAGE_KEY: Record<StageId, UiKey> = { listen: "st_listen", understand: "st_understand", search: "st_search", fetch: "st_fetch", agent: "st_agent", report: "st_report" };
+const STAGE_ICON: Record<StageId, IconName> = { listen: "mic", understand: "brain", search: "search", fetch: "file", agent: "bot", report: "clipboard" };
 
 const EXAMPLES: { t: string; l: string }[] = [
   { t: "Main Nashik ka kisan hoon, PM-KISAN ki eligibility aur aaj gehu ka bhaav kya hai?", l: "hi" },
@@ -30,14 +28,15 @@ const IDLE_COLLAPSE_MS = 120_000;
 
 /**
  * SahayakJourney — the citizen's journey card on the Command Deck.
- *  track   : 7-stage progress rail (question → understanding → portal search → page read → consent → live agent → report)
+ *  track   : 6-stage progress rail (question → understanding → portal search → page read → live agent → report)
  *  chip    : localised status chip (ready / working / waiting for you / done / problem)
  *  bubble  : chat bubbles — the question, a live "what I'm doing now" bubble, then the structured report
- *  modal   : consent dialog for any paid Agent check (fields, cost estimate, allow / not now / do it myself)
+ *  agents  : Agent = auto / live — personal checks start by themselves, in parallel; each card streams steps, live cost,
+ *            the live browser and the run recording. Missing identifiers are plain operational inputs (no consent gate).
  *  OTP     : OTP relay panel (citizen logs in with own OTP → Browser Context Profile → agent re-runs)
  *  TTS     : read the answer aloud in the citizen's language (browser SpeechSynthesis, $0)
  *  collapse: manual collapse + auto-collapse after 2 min idle once a journey is done
- *  idle    : greeting + examples; resumes the last report after a reload (no new TinyFish call)
+ *  idle    : greeting + examples (nothing is resumed after a reload — every question runs fully live)
  */
 export function SahayakJourney() {
   const { t, lang, setLang, languages } = useT();
@@ -49,37 +48,13 @@ export function SahayakJourney() {
   const [speaking, setSpeaking] = useState(false);
   const [showEn, setShowEn] = useState(false);
   const [ids, setIds] = useState<Record<string, Record<string, string>>>({});
-  const [resumed, setResumed] = useState(false);
   const recRef = useRef<InstanceType<SR> | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const lastTouch = useRef(Date.now());
-  const modalRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
 
   const speechOk = typeof window !== "undefined" && !!((window as unknown as { SpeechRecognition?: SR }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: SR }).webkitSpeechRecognition);
-  const pendingConsent = s.consents.find((c) => c.decision === "pending") ?? null;
   const busy = s.phase === "working";
-
-  /* resume the last finished report after a reload */
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const last = JSON.parse(localStorage.getItem(j.lastKey) || "null") as { report_id: string; question: string; at: number } | null;
-        if (!last || Date.now() - last.at > 6 * 3600_000) return;
-        const r = await fetch(`/api/lokmitra/session-summary?user_id=${encodeURIComponent(citizenId())}&limit=1`, { cache: "no-store" });
-        const sum = await r.json();
-        const l = sum?.latest as (JourneyReport & { query: string; created_at: string }) | null;
-        if (!alive || !l || l.report_id !== last.report_id) return;
-        j.resume({ report_id: l.report_id, summary_local: l.summary_local, summary_en: l.summary_en, language: l.language, structured: (l.structured as StructuredReport) ?? null }, last.question);
-        setResumed(true);
-      } catch {}
-    })();
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   /* idle auto-collapse */
   useEffect(() => {
@@ -100,15 +75,6 @@ export function SahayakJourney() {
   useEffect(() => {
     if (s.phase === "waiting" || s.phase === "working") setCollapsed(false);
   }, [s.phase]);
-
-  /* focus the consent dialog + Esc = "not now" */
-  useEffect(() => {
-    if (!pendingConsent) return;
-    modalRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && j.deny(pendingConsent.confirm_id);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pendingConsent, j]);
 
   useEffect(() => () => stopRef.current?.(), []);
 
@@ -180,7 +146,6 @@ export function SahayakJourney() {
     if (!query || busy) return;
     if (l && l !== lang) setLang(l);
     stopRef.current?.();
-    setResumed(false);
     setShowEn(false);
     setText("");
     setCollapsed(false);
@@ -292,7 +257,6 @@ export function SahayakJourney() {
           {s.question && (
             <div className="journey-chat" aria-live="polite">
               <div className="bubble me">{s.question}</div>
-              {resumed && <div className="note"><Icon name="refresh" /> {t("idle_resumed")}</div>}
 
               {(s.phase === "working" || s.phase === "error" || (s.phase === "waiting" && !s.report)) && (
                 <div className={`bubble bot live ${s.phase === "error" ? "err" : ""}`}>
@@ -320,13 +284,23 @@ export function SahayakJourney() {
                 </div>
               )}
 
-              {/* consent decisions + agent runs */}
-              {s.consents.map((c) => (
-                <ConsentCard key={c.confirm_id} c={c} run={s.agents[c.confirm_id]} t={t} onOtp={() => j.otpStart(c.confirm_id)} otpOpen={s.otpFor === c.confirm_id} />
+              {/* live agent tasks — auto-started, streamed live */}
+              {s.tasks.map((c) => (
+                <AgentTaskCard
+                  key={c.confirm_id}
+                  c={c}
+                  run={s.agents[c.confirm_id]}
+                  t={t}
+                  values={ids[c.confirm_id] ?? {}}
+                  onChange={(k, v) => setIds((m) => ({ ...m, [c.confirm_id]: { ...(m[c.confirm_id] ?? {}), [k]: v } }))}
+                  onSubmit={() => j.submitFields(c.confirm_id, ids[c.confirm_id] ?? {})}
+                  onOtp={() => j.otpStart(c.confirm_id)}
+                  otpOpen={s.otpFor === c.confirm_id}
+                />
               ))}
 
               {s.otpFor && (() => {
-                const c = s.consents.find((x) => x.confirm_id === s.otpFor);
+                const c = s.tasks.find((x) => x.confirm_id === s.otpFor);
                 if (!c) return null;
                 return (
                   <div className="bubble bot otp">
@@ -408,60 +382,42 @@ export function SahayakJourney() {
                 <button type="submit" className="btn primary" disabled={!text.trim()}>{t("ask_btn")} →</button>
               )}
               {(s.report || s.phase === "error") && !busy && (
-                <button type="button" className="btn sm" onClick={() => { stopRef.current?.(); j.reset(); setResumed(false); }}>{t("new_q")}</button>
+                <button type="button" className="btn sm" onClick={() => { stopRef.current?.(); j.reset(); }}>{t("new_q")}</button>
               )}
             </div>
           </form>
         </div>
       </div>
 
-      {/* ---------- CONSENT MODAL ---------- */}
-      {pendingConsent && !collapsed && typeof document !== "undefined" && createPortal(
-        <div className="consent-scrim" role="presentation" onClick={(e) => e.target === e.currentTarget && j.deny(pendingConsent.confirm_id)}>
-          <div className="consent-modal" role="dialog" aria-modal="true" aria-labelledby="consent-title" tabIndex={-1} ref={modalRef}>
-            <h3 id="consent-title"><Icon name="lock" /> {t("consent_title")}</h3>
-            <p className="consent-scheme"><b>{pendingConsent.scheme_name}</b> · {pendingConsent.task} · <span className="mono">{pendingConsent.host}</span></p>
-            <p>{t("consent_body", { host: pendingConsent.host, scheme: pendingConsent.scheme_name })}</p>
-            {pendingConsent.requires_otp && <p className="note"><Icon name="phone" /> {t("consent_otp_note")}</p>}
-            {pendingConsent.fields.length > 0 && (
-              <fieldset className="consent-fields">
-                <legend className="label">{t("consent_fields")}</legend>
-                {pendingConsent.fields.map((f) => (
-                  <label key={f.key}>
-                    <span className="label">{f.label}{f.provided ? <> <Icon name="check" size={11} /></> : null}</span>
-                    <input
-                      className="input"
-                      autoComplete="off"
-                      placeholder={f.provided ? "(provided)" : f.label}
-                      value={ids[pendingConsent.confirm_id]?.[f.key] ?? ""}
-                      onChange={(e) => setIds((m) => ({ ...m, [pendingConsent.confirm_id]: { ...(m[pendingConsent.confirm_id] ?? {}), [f.key]: e.target.value } }))}
-                    />
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            <p className="note" title="Informational estimate — no step limit or budget cap">● {t("consent_cost", { steps: pendingConsent.est_steps, cost: fmtUsd(pendingConsent.est_cost_usd) })}</p>
-            <div className="row consent-actions">
-              <button className="btn paid" onClick={() => j.allow(pendingConsent.confirm_id, ids[pendingConsent.confirm_id] ?? {})}><Icon name="check-circle" /> {t("consent_allow")}</button>
-              {pendingConsent.requires_otp && <button className="btn" onClick={() => j.otpStart(pendingConsent.confirm_id)}><Icon name="phone" /> {t("otp_start")}</button>}
-              <button className="btn" onClick={() => j.deny(pendingConsent.confirm_id)}>{t("consent_deny")}</button>
-              <a className="btn sm" href={pendingConsent.entry_url} target="_blank" rel="noreferrer noopener">{t("consent_diy")} ↗</a>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
     </section>
   );
 }
 
-function ConsentCard({ c, run, t, onOtp, otpOpen }: { c: ConsentReq; run?: import("@/hooks/useJourney").AgentRun; t: ReturnType<typeof useT>["t"]; onOtp: () => void; otpOpen: boolean }) {
-  if (c.decision === "pending") return null;
-  if (c.decision === "denied")
+function AgentTaskCard({ c, run, t, values, onChange, onSubmit, onOtp, otpOpen }: { c: AgentTask; run?: import("@/hooks/useJourney").AgentRun; t: ReturnType<typeof useT>["t"]; values: Record<string, string>; onChange: (k: string, v: string) => void; onSubmit: () => void; onOtp: () => void; otpOpen: boolean }) {
+  // purely operational input: shown only while a required identifier is missing — never a consent prompt
+  const missing = c.fields.filter((f) => !f.provided);
+  const filled = missing.length > 0 && missing.every((f) => (values[f.key] ?? "").trim());
+  if (!run && c.needs_input)
     return (
-      <div className="bubble bot muted">
-        <Icon name="lock" /> <b>{c.scheme_name}</b> — {t("consent_skipped")} <a href={c.entry_url} target="_blank" rel="noreferrer noopener">{t("consent_diy")} ↗</a>
-      </div>
+      <form className="bubble bot agent warn" onSubmit={(e) => { e.preventDefault(); if (filled) onSubmit(); }}>
+        <b><Icon name="bot" /> {t("task_title")} · {c.scheme_name}</b>
+        <p>{t("task_body", { host: c.host, scheme: c.scheme_name })}</p>
+        {c.requires_otp && <p className="note"><Icon name="phone" /> {t("task_otp_note")}</p>}
+        <fieldset className="task-fields">
+          <legend className="label">{t("task_fields")}</legend>
+          {missing.map((f) => (
+            <label key={f.key}>
+              <span className="label">{f.label}</span>
+              <input className="input" autoComplete="off" placeholder={f.label} value={values[f.key] ?? ""} onChange={(e) => onChange(f.key, e.target.value)} />
+            </label>
+          ))}
+        </fieldset>
+        <div className="row" style={{ gap: 8 }}>
+          <button type="submit" className="btn paid" disabled={!filled}><Icon name="bot" /> {t("task_run")}</button>
+          {c.requires_otp && <button type="button" className="btn" onClick={onOtp}><Icon name="phone" /> {t("otp_start")}</button>}
+          <a className="btn sm" href={c.entry_url} target="_blank" rel="noreferrer noopener">{t("task_diy")} ↗</a>
+        </div>
+      </form>
     );
   if (!run) return null;
   const res = run.result ?? {};
@@ -471,11 +427,14 @@ function ConsentCard({ c, run, t, onOtp, otpOpen }: { c: ConsentReq; run?: impor
     <div className={`bubble bot agent ${run.running ? "live" : ok ? "ok" : "warn"}`}>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <b><Icon name="bot" /> {run.running ? t("agent_running", { host: run.host }) : ok ? t("agent_done") : run.needs_otp ? t("agent_blocked_otp") : t("agent_failed")}</b>
-        <span className="note mono">{run.steps} {t("steps")}{run.cost_usd ? ` · ${fmtUsd(run.cost_usd)}` : ""}</span>
+        <span className="note mono" title={t("task_cost", { cost: fmtUsd(run.cost_usd), steps: run.steps })}>{run.steps} {t("steps")}{run.cost_usd ? ` · ${fmtUsd(run.cost_usd)}` : ""}</span>
       </div>
-      {run.streaming_url && run.running && (
-        <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ {t("watch_live")}</a>
-      )}
+      <div className="row" style={{ gap: 8 }}>
+        <b>{c.scheme_name}</b>
+        {run.streaming_url && run.running && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ {t("watch_live")}</a>}
+        {run.video_url && !run.running && <a className="btn sm" href={run.video_url} target="_blank" rel="noreferrer noopener">▶ {t("video_rec")}</a>}
+      </div>
+      {run.streaming_url && run.running && <iframe className="live-frame" src={run.streaming_url} title="Live TinyFish agent browser" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
       {run.log.length > 0 && (
         <details open={run.running}>
           <summary className="note">{run.log[run.log.length - 1]}</summary>
