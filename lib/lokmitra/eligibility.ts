@@ -5,6 +5,7 @@
  * The verdict is advisory only — the official portal / CSC remains the authority.
  */
 import { SCHEMES, type SchemeDef } from "./schemes";
+import { stripSchemeNames } from "./answer-style";
 
 export type Verdict = "likely" | "check" | "unlikely" | "na";
 export type ReportSector = "agriculture" | "health" | "education" | "land" | "labour" | "msme" | "welfare";
@@ -39,7 +40,8 @@ export interface Profile {
 
 /** Cheap profile hints from the citizen's own words (no PII is stored). */
 export function profileFromText(text: string, persona: string | null): Profile {
-  const t = text || "";
+  // scheme names ("PM-KISAN", "Kisan Samman") are removed first so they never imply farmer / rural / landholder
+  const t = stripSchemeNames(text || "");
   const ageM = t.match(/\b(\d{2})\s*(?:saal|sal|years?|yrs?|varsh|वर्ष|साल|वर्षे)\b/i) || t.match(/\bage\s*[:=-]?\s*(\d{2})\b/i);
   const age = ageM ? Number(ageM[1]) : null;
   return {
@@ -65,6 +67,7 @@ const RULES: Record<string, Rule> = {
   "pm-kisan": (p) => {
     if (p.income_tax_payer || p.govt_employee) return { verdict: "unlikely", reasons: ["Income-tax payers and serving/retired government employees are excluded."] };
     if (p.persona === "farmer" || p.landholder) return { verdict: "likely", reasons: ["For landholding farmer families with cultivable land in their name.", "Land must be seeded in PM-KISAN and eKYC completed."] };
+    if (p.persona === "student" || p.persona === "worker" || p.persona === "msme") return { verdict: "unlikely", reasons: [`A ${p.persona} qualifies only if their family owns cultivable land recorded in their name — being a ${p.persona} alone does not qualify.`, "Only landholding farmer families qualify."] };
     return { verdict: "check", reasons: ["Only families that own cultivable land qualify."] };
   },
   pmfby: (p) => (p.persona === "farmer" || p.landholder ? { verdict: "likely", reasons: ["All farmers growing notified crops in notified areas, incl. tenants/sharecroppers.", "Enrol before the season cut-off date."] } : { verdict: "check", reasons: ["Only for farmers growing notified crops."] }),

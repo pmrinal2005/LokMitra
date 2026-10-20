@@ -6,6 +6,7 @@ import { guessLanguage, langByCode, LANG_CODES } from "./languages";
 import { COMMODITIES, DISTRICT_HINTS, SCHEMES, STATE_NAME_HINTS, type TaskKind } from "./schemes";
 import { logRun } from "./store";
 import { clip } from "./util";
+import { capWords, personaFromText, stripSchemeNames, type QueryConstraints } from "./answer-style";
 
 /* ================================================================== */
 /* Low-level OpenAI-compatible chat client                             */
@@ -263,6 +264,8 @@ sub_queries (array of {scheme_id, task, personal, note}), english_query (faithfu
 scheme_id must be one of: ${SCHEME_IDS.join(", ")}.
 task: info (eligibility/benefits/how to apply), status (MY application/payment status — personal), land (land record lookup), price (mandi prices), deadline (last date / new circulars).
 personal=true only when the user wants THEIR OWN record (status, land record) which needs their identifiers.
+persona describes the ASKER from their own self-description ("I am a student") — NEVER infer it from a scheme name (PM-KISAN in the question does not make the asker a farmer).
+follow_up=true ONLY for messages that name no scheme and depend on the previous answer; any message naming a scheme is a NEW question.
 Split multi-domain questions into multiple sub_queries. If unsure which scheme, use "myscheme" with task "info".`;
 
 export async function parseIntent(text: string, hint: { language?: string | null; state_code?: string | null; district?: string | null } = {}): Promise<{ intent: Intent; via: "groq" | "heuristic" }> {
@@ -368,7 +371,7 @@ export function heuristicIntent(text: string, hint: { language?: string | null; 
   if (mob) identifiers.mobile_or_aadhaar = mob[1];
   const kh = t.match(/(?:khasra|survey|गट|खसरा)\s*(?:no\.?|number|नंबर)?\s*[:#-]?\s*(\d+[\/\d-]*)/i);
   if (kh) identifiers.khasra_no = kh[1];
-  const persona = /kisan|farmer|किसान|शेतकरी|खेती/i.test(t)
+  const persona = personaFromText(t) ?? (/kisan|farmer|किसान|शेतकरी|खेती/i.test(stripSchemeNames(t))
     ? "farmer"
     : /student|scholar|छात्र|beta|beti/i.test(t)
       ? "student"
@@ -380,7 +383,7 @@ export function heuristicIntent(text: string, hint: { language?: string | null; 
             ? "elderly"
             : /dukaan|business|msme|udyam/i.test(t)
               ? "msme"
-              : null;
+              : null);
   return {
     language,
     state_code,
@@ -390,7 +393,8 @@ export function heuristicIntent(text: string, hint: { language?: string | null; 
     identifiers,
     sub_queries: dedupeSubs(subs).slice(0, 8),
     english_query: t,
-    follow_up: /kaise|how (do|to)|कैसे|ab kya/i.test(t) && subs.length <= 1,
+    // a follow-up only when the message names no scheme of its own (otherwise it is a NEW question → full live pipeline)
+    follow_up: /kaise|how (do|to)|कैसे|ab kya|aur batao|tell me more|what about that/i.test(t) && !SCHEMES.some((s) => s.keywords.test(t)) && !commodity,
   };
 }
 
@@ -565,17 +569,67 @@ export function templateReport(sections: SectionInput[]): string {
   return lines.join("\n");
 }
 
-/** Answer a follow-up ("ab eKYC kaise karein?") grounded in the previous report. */
-export async function followUp(question: string, context: string, language: string): Promise<string | null> {
+/* ================================================================== */
+/* Direct answer — obeys the citizen's own constraints (yes/no, brief, */
+/* in-depth, list, word limits, focus) and is grounded in the LIVE      */
+/* TinyFish Search + Fetch evidence gathered for THIS question.         */
+/* ================================================================== */
+export interface AnswerInput {
+  question: string;
+  english_query: string;
+  language: string;
+  constraints: QueryConstraints;
+  items: { scheme: string; task: string; verdict: string; reasons: string[]; facts: string[]; status: string; sources: string[] }[];
+  evidence: { url: string; text: string }[];
+}
+
+const STYLE_RULE: Record<QueryConstraints["style"], string> = {
+  binary: 'The user demanded a yes/no answer. Reply with exactly "Yes." or "No." (or "Depends." only if truly undecidable), optionally followed by ONE short clause (max 12 words) saying why. Nothing else.',
+  brief: "Reply in 1-2 short sentences. No headings, no lists.",
+  normal: "Reply in 2-4 short sentences answering exactly what was asked. No greeting, no filler.",
+  list: "Reply as a short numbered list (max 6 items, each under 15 words) covering exactly what was asked.",
+  detailed: "The user asked for depth: give a compact structured answer with short markdown headings only for the parts they asked about (e.g. Verdict, Benefit, Eligibility, Exclusions, Documents, How to apply, Helpline). Bullets under 18 words each.",
+};
+
+export async function answerQuestion(a: AnswerInput): Promise<{ answer_en: string; answer_local: string; model?: string } | null> {
   if (!cfg.groqKey()) return null;
+  const c = a.constraints;
+  const lang = langByCode(a.language);
+  const evidence = a.evidence.map((e) => `## ${e.url}\n${clip(e.text.replace(/\n{2,}/g, "\n"), c.style === "detailed" ? 2600 : 1600)}`).join("\n\n").slice(0, c.style === "detailed" ? 9000 : 6000);
+  const system = `You are LokMitra, an Indian government-scheme assistant. Answer the citizen's EXACT question, obeying their explicit instructions above all else.
+Style: ${STYLE_RULE[c.style]}
+Hard limit: ${c.max_words} words per answer. Short, concise, crisp — never long.
+Focus only on: ${c.focus.join(", ")}.${c.persona ? ` The asker is a ${c.persona}; judge eligibility for THAT person (e.g. a student is not a landholding farmer unless they say so).` : ""}
+Ground every fact in the LIVE EVIDENCE (official pages fetched just now) or the CHECKED FACTS; never invent amounts, dates, URLs. If evidence is silent, say so briefly.
+Return ONLY JSON {"answer_en": string, "answer_local": string} — answer_local is the same answer in ${lang.name} (${lang.native}); if the language is English, repeat answer_en.`;
+  const user = JSON.stringify({ question: a.question, english: a.english_query, explicit_instructions: c.instructions, checked_facts: a.items, live_evidence: evidence });
   try {
-    return await chatChain([cfg.groqModelMid(), cfg.groqModelHeavy()], {
+    const raw = await chatChain([cfg.groqModelHeavy(), cfg.groqModelMid(), cfg.groqModelLight()], { purpose: `answer_${c.style}`, system, user, json: true, temperature: 0.2, maxTokens: c.style === "detailed" ? 1400 : 700, timeoutMs: 35_000 });
+    const j = parseJson<{ answer_en?: string; answer_local?: string }>(raw);
+    const en = String(j?.answer_en ?? "").trim();
+    if (!en) return null;
+    const local = String(j?.answer_local ?? "").trim() || en;
+    const cap = c.max_words + (c.style === "binary" ? 12 : 10);
+    return { answer_en: capWords(en, cap), answer_local: a.language === "en" ? capWords(en, cap) : capWords(local, cap * 2) };
+  } catch (e) {
+    console.warn("[lokmitra:answer]", (e as Error).message);
+    return null;
+  }
+}
+
+/** Answer a follow-up ("ab eKYC kaise karein?") grounded in the previous report. */
+export async function followUp(question: string, context: string, language: string, constraints?: QueryConstraints): Promise<string | null> {
+  if (!cfg.groqKey()) return null;
+  const c = constraints;
+  try {
+    const out = await chatChain([cfg.groqModelMid(), cfg.groqModelHeavy()], {
       purpose: "follow_up",
-      system: `You are LokMitra, a patient government-scheme helper. Answer the follow-up using the previous report as context plus well-known official procedures. Be concrete (portal path, documents, CSC, helpline). If unsure, say so. Reply in ${langByCode(language).name}, simple words, max 150 words.`,
+      system: `You are LokMitra, a patient government-scheme helper. Answer the follow-up using the previous report as context plus well-known official procedures. Be concrete (portal path, documents, CSC, helpline). If unsure, say so. Obey the user's explicit instructions${c?.instructions.length ? ` (${c.instructions.join("; ")})` : ""}${c?.style === "binary" ? '; reply "Yes." or "No." plus at most one short clause' : ""}. Reply in ${langByCode(language).name}, simple words, short and crisp, max ${c?.max_words ?? 80} words.`,
       user: `Previous report:\n${context.slice(0, 5000)}\n\nFollow-up: ${question}`,
       temperature: 0.2,
       maxTokens: 700,
     });
+    return c ? capWords(out, c.max_words + 10) : out;
   } catch {
     return null;
   }

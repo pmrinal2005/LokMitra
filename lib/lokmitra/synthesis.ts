@@ -4,13 +4,14 @@ import { db, safe, type Row } from "./db";
 import { alsoEligible, eligibility, profileFromText, reportSector, SECTOR_ICON, type ReportSector } from "./eligibility";
 import { factCheck, factCheckPages, type FactResult } from "./facts";
 import { glossaryLang } from "./glossary";
-import { chatJson, translateBatch, type Intent, type SectionInput } from "./groq";
+import { answerQuestion, chatJson, translateBatch, type Intent, type SectionInput } from "./groq";
+import { analyzeQuery, capWords, shortClause, type QueryConstraints } from "./answer-style";
 import { listSentinels } from "./sentinel";
 import { fetch_clean_markdown } from "./ops";
 import { schemeById } from "./schemes";
 import { clip, hostOf } from "./util";
 import { isBoilerplate } from "./extract";
-import { reportToMarkdown, type Contradiction, type KeyFact, type NextStep, type ReportItem, type SentinelFact, type StructuredReport } from "./report-shape";
+import { reportToMarkdown, type ReportAnswer, type Contradiction, type KeyFact, type NextStep, type ReportItem, type SentinelFact, type StructuredReport } from "./report-shape";
 
 /**
  * P4 — Synthesis: merges every per-scheme result into ONE structured, sector-grouped,
@@ -113,9 +114,45 @@ function nextStepsFor(items: ReportItem[], contradictions: Contradiction[]): Nex
   return steps.sort((a, b) => a.priority - b.priority).slice(0, 6);
 }
 
-export async function buildReport(input: { query: string; intent: Intent; sections: SynthSection[]; language: string; agentResults?: Row[] }): Promise<StructuredReport> {
+/** Deterministic answer used when Groq is unavailable — still obeys style + focus. */
+function rulesAnswer(c: QueryConstraints, items: ReportItem[], question: string): string {
+  // the scheme the citizen named first is the subject of the answer (generic discovery last)
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9\u0900-\u097f]+/g, "");
+  const nq = norm(question);
+  const pos = (i: ReportItem) => {
+    if (i.scheme_id === "myscheme") return 1e9;
+    const sc = schemeById(i.scheme_id);
+    // an explicitly NAMED scheme ("pm kisan", "ayushman", "e-shram") outranks a persona keyword hit ("student" → NSP)
+    const names = [i.scheme_id, sc?.name ?? "", (sc?.name ?? "").split(/\s+/)[0]].map(norm).filter((n) => n.length >= 4);
+    const named = names.map((n) => nq.indexOf(n)).filter((x) => x >= 0);
+    if (named.length) return Math.min(...named);
+    const m = sc?.keywords.exec(question);
+    return m ? 1e6 + m.index : 1e8;
+  };
+  const main = [...items].sort((a, b) => pos(a) - pos(b))[0];
+  if (!main) return "I could not find this on the official portals right now.";
+  const v = main.verdict;
+  const reason = main.reasons[0] ?? "";
+  if (c.style === "binary") return `${v === "likely" ? "Yes." : v === "unlikely" ? "No." : "Depends."} ${reason ? shortClause(reason, 14) : ""}`.trim();
+  const fact = (k: string) => main.facts.find((f) => f.key === k)?.value;
+  const parts: string[] = [];
+  if (c.asks_eligibility || c.focus.includes("general")) parts.push(`${main.scheme_name}: ${v === "likely" ? "you are likely eligible" : v === "unlikely" ? "you are probably not eligible" : "eligibility needs checking"}${reason ? ` — ${reason}` : ""}`);
+  if (c.style === "detailed" && main.reasons[1]) parts.push(`Eligibility rule: ${main.reasons[1]}`);
+  if (c.focus.includes("benefit") || c.style === "detailed") fact("benefit") && parts.push(`Benefit: ${fact("benefit")}`);
+  if (c.focus.includes("documents") || c.style === "detailed") parts.push(fact("documents") ? `Documents: ${fact("documents")}` : c.focus.includes("documents") ? "Documents: not listed on the official page fetched just now — confirm at your nearest CSC or the scheme helpline" : "");
+  if (c.focus.includes("deadline")) parts.push(`Last date: ${fact("deadline") ?? "not stated on the official page"}`);
+  const applyStep = main.diy.find((d) => /regist|apply|enrol|otr|new farmer|aavedan/i.test(d)) ?? main.diy[0];
+  if (c.focus.includes("apply") || c.style === "detailed") applyStep && parts.push(`How to apply: ${applyStep}`);
+  if (!parts.filter(Boolean).length) parts.push(`${main.scheme_name}: ${fact("benefit") ?? reason}`);
+  for (let k = parts.length - 1; k >= 0; k--) if (!parts[k]) parts.splice(k, 1);
+  const joined = c.style === "list" || c.style === "detailed" ? parts.map((p, i) => `${i + 1}. ${p}`).join("\n") : parts.join(". ");
+  return capWords(joined, c.max_words + 10);
+}
+
+export async function buildReport(input: { query: string; intent: Intent; sections: SynthSection[]; language: string; agentResults?: Row[]; constraints?: QueryConstraints }): Promise<StructuredReport> {
   const { intent, sections } = input;
-  const profile = profileFromText(`${input.query} ${intent.english_query}`, intent.persona);
+  const constraints = input.constraints ?? analyzeQuery(input.query, { persona: intent.persona });
+  const profile = profileFromText(`${input.query} ${intent.english_query}`, constraints.persona ?? intent.persona);
   const items: ReportItem[] = [];
   const contradictions: Contradiction[] = [];
 
@@ -165,26 +202,45 @@ export async function buildReport(input: { query: string; intent: Intent; sectio
 
   const blocks = new Map<ReportSector, ReportItem[]>();
   for (const it of items) blocks.set(it.sector, [...(blocks.get(it.sector) ?? []), it]);
-  const also = alsoEligible(schemeIds, profile, 4);
+  const also = constraints.style === "binary" || constraints.style === "brief" ? [] : alsoEligible(schemeIds, profile, constraints.style === "detailed" ? 4 : 3);
   const sources = [...new Set(items.flatMap((i) => i.sources).filter((u) => /^https?:\/\//.test(u)))].slice(0, 12);
   const all = items.flatMap((i) => i.fact_check);
   const likely = items.filter((i) => i.verdict === "likely").map((i) => i.scheme_name);
   let headline = `${items.length} request(s) checked across ${blocks.size} sector(s)${likely.length ? ` — likely eligible: ${likely.join(", ")}` : ""}${also.length ? `; ${also.length} more scheme(s) you may qualify for` : ""}${contradictions.length ? `; ${contradictions.length} point(s) to double-check` : ""}.`;
 
+  // Direct answer to the EXACT question (live evidence + the user's own constraints) — runs in parallel with the headline
+  const answerP: Promise<ReportAnswer> = (async () => {
+    const evidence = sections.flatMap((s) => (s.pages ?? []).filter((p) => p.text && p.text.length > 60)).slice(0, 6);
+    const g = await answerQuestion({
+      question: input.query,
+      english_query: intent.english_query || input.query,
+      language: input.language,
+      constraints,
+      items: items.map((i) => ({ scheme: i.scheme_name, task: i.task, verdict: i.verdict, reasons: i.reasons, facts: i.facts.slice(0, 6).map((f) => `${f.key}: ${f.value}`), status: i.status, sources: i.sources.slice(0, 2) })),
+      evidence,
+    });
+    if (g) return { style: constraints.style, focus: constraints.focus, persona: constraints.persona, text: g.answer_en, text_local: input.language !== "en" ? g.answer_local : undefined, via: "groq", model: null };
+    return { style: constraints.style, focus: constraints.focus, persona: constraints.persona, text: rulesAnswer(constraints, items, `${input.query} ${intent.english_query}`), via: "rules", model: null };
+  })();
+
   // Optional Groq headline (grounded in the structured facts only)
-  if (cfg.groqKey()) {
+  if (cfg.groqKey() && constraints.style !== "binary" && constraints.style !== "brief") {
     const h = await chatJson<{ headline?: string }>({
       purpose: "synthesis_headline",
-      system: "You write ONE plain-English sentence (max 35 words) summarising a citizen's government-scheme report for a low-literacy rural reader. Use ONLY the facts given; never invent numbers. Return JSON {\"headline\": string}.",
-      user: JSON.stringify({ persona: intent.persona, state: intent.state_code, items: items.map((i) => ({ scheme: i.scheme_name, verdict: i.verdict, status: i.status, facts: i.facts.slice(0, 3).map((f) => f.value) })), also_eligible: also.map((a) => a.name), contradictions: contradictions.length }),
+      system: "You write ONE plain-English sentence (max 25 words) summarising a citizen's government-scheme report for a low-literacy rural reader, focused on what they actually asked. Use ONLY the facts given; never invent numbers; respect each verdict (\"unlikely\" means NOT eligible). Return JSON {\"headline\": string}.",
+      user: JSON.stringify({ question: input.query, persona: constraints.persona ?? intent.persona, state: intent.state_code, items: items.map((i) => ({ scheme: i.scheme_name, verdict: i.verdict, status: i.status, facts: i.facts.slice(0, 3).map((f) => f.value) })), also_eligible: also.map((a) => a.name), contradictions: contradictions.length }),
     });
     if (h?.headline) headline = clip(h.headline, 300);
   }
 
+  const answer = await answerP;
+  if (constraints.style === "binary" || constraints.style === "brief") headline = answer.text;
+
   const report: StructuredReport = {
     version: 1,
+    answer,
     language: input.language,
-    persona: intent.persona,
+    persona: constraints.persona ?? intent.persona,
     state_code: intent.state_code,
     district: intent.district,
     headline,
@@ -212,7 +268,10 @@ export async function localizeReport(r: StructuredReport, lang: string): Promise
   const push = (text: string | undefined | null, set: (v: string) => void) => {
     if (text && text.trim()) slots.push({ text, set });
   };
-  push(r.headline, (v) => (r.headline_local = v));
+  const sameHead = !!r.answer && r.headline === r.answer.text;
+  if (r.answer && !r.answer.text_local) push(r.answer.text, (v) => { r.answer!.text_local = v; if (sameHead) r.headline_local = v; });
+  else if (sameHead) r.headline_local = r.answer?.text_local;
+  if (!sameHead) push(r.headline, (v) => (r.headline_local = v));
   for (const it of items) {
     it.reasons_local = [];
     it.diy_local = [];

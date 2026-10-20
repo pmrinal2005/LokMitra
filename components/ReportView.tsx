@@ -2,6 +2,7 @@ import type { StructuredReport } from "@/lib/lokmitra/report-shape";
 import { factStatusLabel, keyLabel, reportHost, sectorLabel, sortSectors, statusLabel, verdictLabel } from "@/lib/lokmitra/report-shape";
 import { L } from "@/lib/lokmitra/glossary";
 import { Icon, SectorIcon } from "./Icon";
+import { mdToHtml } from "@/lib/md";
 
 /**
  * Structured Citizen Benefit Report renderer — sector cards, verdict badges, key facts,
@@ -13,9 +14,12 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
   const loc = !showEnglish && lang !== "en";
   const l = showEnglish ? "en" : lang;
   const pick = (en: string, local?: string) => (loc && local ? local : en);
-  return (
-    <div className={`report-view ${tone}`} lang={l}>
-      <p className="rv-headline">{pick(r.headline, r.headline_local)}</p>
+  const ans = r.answer?.text ? r.answer : null;
+  // narrow questions (yes/no, brief) show ONLY the direct answer up-front; the full report folds away below it
+  const compact = !!ans && (ans.style === "binary" || ans.style === "brief");
+  const body = (
+    <>
+      {!compact && r.headline !== ans?.text && <p className="rv-headline">{pick(r.headline, r.headline_local)}</p>}
       <div className="rv-stats">
         <span className="chip hit">● {r.stats.live_sections ?? r.stats.sections}/{r.stats.sections} {L("live_fetched", l)}</span>
         <span className="chip"><Icon name="check" /> {r.stats.facts_confirmed} {L("confirmed", l)}</span>
@@ -176,6 +180,28 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
             ))}
           </ol>
         </section>
+      )}
+    </>
+  );
+  return (
+    <div className={`report-view ${tone}`} lang={l}>
+      {ans && (
+        <section className={`rv-answer a-${ans.style}`} aria-label="Answer to your question">
+          <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(pick(ans.text, ans.text_local)) }} />
+          <span className="rv-answer-meta">
+            {ans.style === "binary" ? "yes / no" : ans.style === "detailed" ? "in depth" : ans.style}
+            {ans.persona ? ` · for a ${ans.persona}` : ""} · {ans.via === "groq" ? "Groq · live evidence" : "rules · live evidence"}
+          </span>
+        </section>
+      )}
+      {!ans && <p className="rv-headline">{pick(r.headline, r.headline_local)}</p>}
+      {compact ? (
+        <details className="rv-more">
+          <summary className="note">Full Citizen Benefit Report</summary>
+          {body}
+        </details>
+      ) : (
+        body
       )}
     </div>
   );

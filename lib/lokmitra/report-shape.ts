@@ -73,8 +73,20 @@ export interface NextStep {
   priority: number; // 1 = most urgent
 }
 
+/** Direct answer to the citizen's exact question, shaped by their own constraints (yes/no, brief, in-depth…). */
+export interface ReportAnswer {
+  style: "binary" | "brief" | "normal" | "detailed" | "list";
+  focus: string[];
+  persona: string | null;
+  text: string;
+  text_local?: string;
+  via: "groq" | "rules";
+  model?: string | null;
+}
+
 export interface StructuredReport {
   version: 1;
+  answer?: ReportAnswer | null;
   language: string;
   persona: string | null;
   state_code: string | null;
@@ -116,9 +128,19 @@ export function reportToMarkdown(r: StructuredReport, lang: string, opts: { loca
   const loc = opts.local !== false && lang !== "en";
   const pick = (en: string, local?: string) => (loc && local ? local : en);
   const out: string[] = [];
-  out.push(`**${L("greeting", lang)}**`);
-  const head = pick(r.headline, r.headline_local);
-  if (head) out.push(head);
+  if (r.answer?.text) {
+    out.push(pick(r.answer.text, r.answer.text_local));
+    // binary / brief questions get ONLY the answer (+ the official source); the full report stays on the slip / cards
+    if (r.answer.style === "binary" || r.answer.style === "brief") {
+      if (r.sources.length) out.push(`\n${L("sources", lang)}: ${r.sources.slice(0, 2).join(" · ")}`);
+      return out.join("\n");
+    }
+    out.push("");
+  } else {
+    out.push(`**${L("greeting", lang)}**`);
+    const head = pick(r.headline, r.headline_local);
+    if (head) out.push(head);
+  }
   for (const s of sortSectors(r.sectors)) {
     out.push(`\n### ${sectorLabel(s.id, lang)}`);
     for (const it of s.items) {

@@ -817,6 +817,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 /* ── Structured Citizen Benefit Report (P4) ───────────────────────────── */
 .report-view { display: flex; flex-direction: column; gap: 12px; }
 .rv-headline { margin: 0; font-size: 15px; line-height: 1.5; color: var(--pearl); }
+.rv-answer { border-radius: 14px; border: 1px solid var(--teal, #3fe0c5); background: rgba(63,224,197,.07); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.rv-answer .md-body { font-size: 15px; line-height: 1.55; color: var(--pearl); }
+.rv-answer.a-binary .md-body { font-size: 18px; font-weight: 600; }
+.rv-answer-meta { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.rv-more { display: flex; flex-direction: column; gap: 12px; }
+.rv-more > summary { cursor: pointer; margin-bottom: 10px; }
+.report-view.print .rv-answer { background: #f3fbf9; border-color: #8cc9b9; }
+.report-view.print .rv-answer .md-body { color: #111; }
 .rv-stats { display: flex; gap: 6px; flex-wrap: wrap; }
 .rv-sectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .rv-sector { border-radius: 16px; border: 1px solid var(--hair-strong); background: rgba(6,9,15,.45); padding: 12px; display: flex; flex-direction: column; gap: 10px; }

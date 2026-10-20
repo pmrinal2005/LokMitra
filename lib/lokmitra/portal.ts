@@ -2,6 +2,7 @@ import "server-only";
 import { fill, schemeById, stateByCode, STATES, type SchemeDef, type TaskKind } from "./schemes";
 import { search_schemes, type SearchHit } from "./ops";
 import { hostOf, isGovHost, uniq } from "./util";
+import { focusSearchTerms, type QueryConstraints } from "./answer-style";
 
 /**
  * Live portal resolution — NO caching anywhere.
@@ -91,7 +92,14 @@ function rankHits(hits: SearchHit[], scheme: SchemeDef, state: string): SearchHi
   return [...hits].filter((h) => score(h) >= 5).sort((a, b) => score(b) - score(a));
 }
 
-export function searchQueryFor(scheme: SchemeDef, task: TaskKind, ctx: { state?: string | null; district?: string | null; commodity?: string | null; persona?: string | null }) {
+export function searchQueryFor(scheme: SchemeDef, task: TaskKind, ctx: { state?: string | null; district?: string | null; commodity?: string | null; persona?: string | null; constraints?: QueryConstraints }) {
+  const base = baseSearchQuery(scheme, task, ctx);
+  // shape the live Search by what the citizen actually asked (focus + persona), e.g. "… eligibility criteria students"
+  const extra = task === "info" && ctx.constraints ? focusSearchTerms(ctx.constraints) : "";
+  return `${base} ${extra}`.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+function baseSearchQuery(scheme: SchemeDef, task: TaskKind, ctx: { state?: string | null; district?: string | null; commodity?: string | null; persona?: string | null }) {
   const stateName = ctx.state && ctx.state !== "IN" ? stateByCode(ctx.state).name : "";
   if (task === "deadline") return `${scheme.name} last date ${stateName} ${new Date().getFullYear()} official notice`.replace(/\s+/g, " ").trim();
   if (task === "status") return `${scheme.name} beneficiary status check official portal ${stateName}`.replace(/\s+/g, " ").trim();
@@ -106,7 +114,7 @@ export function searchQueryFor(scheme: SchemeDef, task: TaskKind, ctx: { state?:
 export async function resolvePortalLive(
   schemeId: string,
   task: TaskKind,
-  ctx: { state?: string | null; district?: string | null; commodity?: string | null; persona?: string | null },
+  ctx: { state?: string | null; district?: string | null; commodity?: string | null; persona?: string | null; constraints?: QueryConstraints },
 ): Promise<{ portal: LivePortal; searched: SearchHit[]; query: string; searchError?: string; latency_ms: number }> {
   const scheme = schemeById(schemeId);
   if (!scheme) throw new Error(`unknown scheme ${schemeId}`);

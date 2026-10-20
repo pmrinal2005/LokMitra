@@ -10,6 +10,8 @@ import { portalState as portalStateOf, resolvePortalLive, type LivePortal } from
 import { estimateSteps, schemeById, stateByCode, type SchemeDef } from "./schemes";
 import { getUser, logRun, rateLimit, sessions, upsertUser } from "./store";
 import { clip, hostOf, nowIso, redact, seal, uuid } from "./util";
+import { analyzeQuery, type QueryConstraints } from "./answer-style";
+import { SCHEMES } from "./schemes";
 
 export type Emit = (event: string, data: Record<string, unknown>) => void | Promise<void>;
 
@@ -120,7 +122,7 @@ function shownUrl(p: { url: string; final_url: string | null }) {
   return p.final_url && !/^\d{1,3}(\.\d{1,3}){3}$/.test(hostOf(p.final_url)) ? p.final_url : p.url;
 }
 
-async function extractSection(scheme: SchemeDef, sub: SubQuery, pages: FetchedPage[], intent: Intent): Promise<{ data: Record<string, unknown>; status: Section["status"] }> {
+async function extractSection(scheme: SchemeDef, sub: SubQuery, pages: FetchedPage[], intent: Intent, qc?: QueryConstraints): Promise<{ data: Record<string, unknown>; status: Section["status"] }> {
   const good = pages.filter((p) => p.text && p.text.length > 80);
   if (!good.length) return { data: { excerpt: null, errors: pages.map((p) => `${hostOf(p.url)}: ${p.error ?? "empty"}`) }, status: "error" };
   const md = good.map((p) => `## SOURCE ${shownUrl(p)}\n# ${p.title ?? ""}\n${p.text}`).join("\n\n").slice(0, 15000);
@@ -139,7 +141,7 @@ async function extractSection(scheme: SchemeDef, sub: SubQuery, pages: FetchedPa
     if (x && (x.deadline || x.latest_notice_title)) return { data: x, status: "ok" };
     return { data: { excerpt: excerpt(md, /last date|deadline|अंतिम|extended|notice|circular|\b20\d\d\b/i) }, status: "partial" };
   }
-  const x = await extractFromMarkdown<Record<string, unknown>>({ markdown: md, schemaHint: INFO_HINT, question: `Eligibility, benefits, documents and how to apply for ${scheme.name}${intent.persona ? ` (citizen is a ${intent.persona})` : ""}`, purpose: "extract_info" });
+  const x = await extractFromMarkdown<Record<string, unknown>>({ markdown: md, schemaHint: INFO_HINT, question: `${qc && !qc.focus.includes("general") ? `Focus on: ${qc.focus.join(", ")}. ` : ""}Eligibility, exclusions, benefits, documents and how to apply for ${scheme.name}${(qc?.persona ?? intent.persona) ? ` (the citizen is a ${qc?.persona ?? intent.persona})` : ""}. Citizen asked: "${clip(intent.english_query, 200)}"`, purpose: "extract_info" });
   if (x && Array.isArray(x.eligibility) && x.eligibility.length) return { data: x, status: "ok" };
   return { data: { scheme_name: scheme.name, benefit: scheme.benefit, excerpt: excerpt(md, /eligib|benefit|document|apply|पात्र|लाभ|last date|helpline/i) }, status: "partial" };
 }
@@ -205,18 +207,22 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   const hint = { language: input.language ?? user?.language ?? null, state_code: input.state_code ?? user?.state_code ?? null, district: input.district ?? user?.district ?? null };
   await emit("stage", { stage: "nlu", message: "Understanding your question…" });
   const { intent, via } = await parseIntent(text, hint);
+  // the citizen's OWN constraints (yes/no, brief, in-depth, list, focus, persona) drive Search, extraction and the answer
+  const qc = analyzeQuery(`${text} ${intent.english_query && intent.english_query !== text ? intent.english_query : ""}`, { persona: intent.persona });
+  if (qc.persona) intent.persona = qc.persona;
+  if (intent.follow_up && SCHEMES.some((s) => s.keywords.test(text))) intent.follow_up = false; // naming a scheme = a NEW question → full live run
   if (input.state_code && !intent.state_code) intent.state_code = input.state_code;
   if (input.district && !intent.district) intent.district = input.district;
   Object.assign(intent.identifiers, input.identifiers ?? {});
   const replyLang = input.language || intent.language || user?.language || "en";
-  await emit("intent", { intent: { ...intent, identifiers: Object.keys(intent.identifiers) }, via, reply_language: replyLang });
+  await emit("intent", { intent: { ...intent, identifiers: Object.keys(intent.identifiers) }, via, reply_language: replyLang, constraints: qc });
   void upsertUser({ id: userId, channel: input.channel ?? "web", language: replyLang, state_code: intent.state_code ?? user?.state_code ?? null, district: intent.district ?? user?.district ?? null });
 
   /* ---- follow-up questions answered from the previous report ---- */
   if (intent.follow_up) {
     const chat = await sessions.get<{ summary_en: string }>(`chat_${userId}`.slice(0, 128));
     if (chat?.data.summary_en) {
-      const ans = await followUp(text, chat.data.summary_en, replyLang);
+      const ans = await followUp(text, chat.data.summary_en, replyLang, qc);
       if (ans) {
         const report_id = uuid();
         await emit("report", { report_id, summary_en: ans, summary_local: ans, language: replyLang, follow_up: true });
@@ -233,7 +239,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
       const scheme = schemeById(sub.scheme_id)!;
       const pState = portalStateOf(scheme, intent.state_code, sub.task);
       try {
-        const r = await resolvePortalLive(scheme.id, sub.task, { state: intent.state_code, district: intent.district, commodity: intent.commodity, persona: intent.persona });
+        const r = await resolvePortalLive(scheme.id, sub.task, { state: intent.state_code, district: intent.district, commodity: intent.commodity, persona: intent.persona, constraints: qc });
         const search = { query: r.query, results: r.searched.length, error: r.searchError ?? null, latency_ms: r.latency_ms };
         await emit("search", { scheme_id: scheme.id, scheme: scheme.name, task: sub.task, state: pState, query: r.query, results: r.searched.length, top: r.searched.slice(0, 3).map((h) => h.url), links: r.portal.deep_links.map((l) => l.url), resolved_via: r.portal.resolved_via, latency_ms: r.latency_ms, error: r.searchError ?? null });
         return { sub, scheme, portalState: pState, live: r.portal as LivePortal | null, search };
@@ -284,16 +290,16 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     const urls = urlPlan.get(`${scheme.id}:${sub.task}`) ?? [];
     const ps = urls.map((u) => byUrl.get(u)).filter(Boolean) as FetchedPage[];
     pagesBySection.set(`${scheme.id}:${sub.task}`, ps.filter((p) => p.text).map((p) => ({ url: shownUrl(p), text: p.text })));
-    const { data, status } = await extractSection(scheme, sub, ps, intent);
+    const { data, status } = await extractSection(scheme, sub, ps, intent, qc);
     const sec: Section = { ...base, status, data, sources: ps.filter((p) => p.text).map((p) => shownUrl(p)).concat(ps.length ? [] : [scheme.entry]), excerpt_sources: ps.map((p) => ({ url: p.url, title: p.title, error: p.error, latency_ms: p.latency_ms ?? null })) };
     sections.push(sec);
     await emit("section", sec as unknown as Record<string, unknown>);
   }
 
   /* ---- synthesis (structured, sector-grouped, contradiction-aware) + localisation ---- */
-  await emit("stage", { stage: "synthesis", message: "Writing your structured Citizen Benefit Report (sectors · eligibility · fact-check · next steps)…" });
+  await emit("stage", { stage: "synthesis", message: qc.style === "binary" ? "Answering your yes/no question from the live official pages…" : qc.style === "brief" ? "Writing a short answer from the live official pages…" : qc.style === "detailed" ? "Writing an in-depth answer + structured Citizen Benefit Report from the live official pages…" : "Answering your question + writing your Citizen Benefit Report…" });
   const synthIn: SynthSection[] = sections.map((s) => ({ ...s, pages: pagesBySection.get(`${s.scheme_id}:${s.task}`) ?? [], confirm: s.confirm ? { confirm_id: s.confirm.confirm_id, est_steps: s.confirm.est_steps, est_cost_usd: s.confirm.est_cost_usd, entry_url: s.confirm.entry_url, requires_otp: s.confirm.requires_otp } : undefined }));
-  let structured = await buildReport({ query: text, intent, sections: synthIn, language: replyLang });
+  let structured = await buildReport({ query: text, intent, sections: synthIn, language: replyLang, constraints: qc });
   if (replyLang !== "en") {
     await emit("stage", { stage: "translate", message: `Translating into ${langByCode(replyLang).native} (offline glossary labels + Groq translation chain)…` });
     structured = await localizeReport(structured, replyLang);
@@ -325,7 +331,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   void logRun({ surface: "llm", purpose: "report", state_code: intent.state_code, latency_ms: Date.now() - t0, meta: { sections: sections.length, via, lang: replyLang, channel: input.channel ?? "web", live_calls } });
 
   const result: AskResult = { report_id, language: replyLang, intent, intent_via: via, sections, summary_en, summary_local, structured, sources, live_calls, cost_usd: 0, elapsed_ms: Date.now() - t0 };
-  await emit("report", { report_id, summary_en, summary_local, language: replyLang, sources, live_calls, elapsed_ms: result.elapsed_ms, structured });
+  await emit("report", { report_id, summary_en, summary_local, language: replyLang, sources, live_calls, elapsed_ms: result.elapsed_ms, structured, answer: structured.answer ?? null });
   return result;
 }
 
