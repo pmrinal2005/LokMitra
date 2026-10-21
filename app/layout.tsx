@@ -15,8 +15,8 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-/** Runs before paint: restores Calm Mode (or honours prefers-reduced-motion) without a flash. */
-const calmBoot = `try{var c=localStorage.getItem('lm-calm');if(c==='1'||(c===null&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)){document.documentElement.classList.add('calm')}}catch(e){}`;
+/** Runs before paint: restores the light/dark theme and Calm Mode (or honours prefers-reduced-motion) without a flash. */
+const calmBoot = `try{var t=localStorage.getItem('lm-theme');if(t!=='light'&&t!=='dark'){t='dark'}document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t}catch(e){}try{var c=localStorage.getItem('lm-calm');if(c==='1'||(c===null&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)){document.documentElement.classList.add('calm')}}catch(e){}`;
 
 /**
  * Root shell shared by the landing page ("/") and the command deck ("/dashboard" and

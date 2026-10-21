@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useT } from "@/lib/i18n/client";
+import { ThemeToggle } from "./ThemeToggle";
 import type { UiKey } from "@/lib/i18n/ui-strings";
 
 /** In-page pills. "Wallet" is operator-only and deep-links to Settings → Usage & Infrastructure. */
@@ -132,6 +133,7 @@ export function GlassNav({
             </span>
           )}
         </span>
+        <ThemeToggle />
         <button className="icon-btn" onClick={onSound} aria-pressed={soundOn} aria-label={soundOn ? "Mute ambient sound" : "Enable ambient sound"} title="Ambient sonar audio">
           {soundOn ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /></svg>

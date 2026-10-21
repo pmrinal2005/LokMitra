@@ -3,8 +3,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRole } from "@/hooks/useRole";
+import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/lib/i18n/client";
 import { Icon } from "./Icon";
+import { ThemeToggle } from "./ThemeToggle";
 
 type Item = { href: string; label: string; icon: React.ReactNode; badge?: { text: string; paid?: boolean }; operatorOnly?: boolean };
 
@@ -18,7 +20,6 @@ const I = {
   runs: <path d="M4 6h16M4 12h10M4 18h7M18 14l3 3-3 3" />,
   csc: <path d="M3 10h18M5 10v9h14v-9M3 10l2-5h14l2 5M9 19v-5h6v5" />,
   judge: <path d="M12 3v18M5 7h14M5 7l-3 7a3 3 0 0 0 6 0L5 7zM19 7l-3 7a3 3 0 0 0 6 0l-3-7zM8 21h8" />,
-  bot: <path d="M5 9h14v9H5zM12 5v4M9 13h.01M15 13h.01M9 16h6M3 12v3M21 12v3" />,
   doc: <path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 15h7M9 18h4" />,
   chart: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   gear: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />,
@@ -37,7 +38,6 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { href: "/csc", label: "CSC Desk", icon: svg(I.csc), badge: { text: "slip+QR" } },
       { href: "/portal-map", label: "Portal Explorer", icon: svg(I.map), badge: { text: "live" } },
       { href: "/reports", label: "Benefit Reports", icon: svg(I.doc), badge: { text: "email" } },
-      { href: "/bot-simulator", label: "Bot Simulator", icon: svg(I.bot), badge: { text: "telegram" } },
     ],
   },
   {
@@ -79,6 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [wallet, setWallet] = useState<{ bal: string | null; spend: number | null }>({ bal: null, spend: null });
   const { isOperator, ready: roleReady, switchTo, error: roleError } = useRole();
   const { t, lang, setLang, languages } = useT();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     try {
@@ -148,31 +149,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="sb-foot" aria-live="polite">
-          <label className="sb-lang" title={t("lang_label")}>
-            <span aria-hidden="true"><Icon name="globe" /></span>
+          <label className="sb-lang sb-foot-item" title={t("lang_label")}>
+            <span className="sb-foot-icon" aria-hidden="true"><Icon name="globe" /></span>
             <select className="sb-lang-select sb-foot-text" value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t("lang_label")}>
               {languages.map((l) => (
                 <option key={l.code} value={l.code}>{l.native}</option>
               ))}
             </select>
           </label>
+          <button type="button" className="sb-theme sb-foot-item" onClick={toggleTheme} aria-pressed={theme === "light"} aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"} title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}>
+            <span className="sb-foot-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                {theme === "light" ? <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /> : <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>}
+              </svg>
+            </span>
+            <span className="sb-foot-text">{theme === "light" ? "Dark mode" : "Light mode"}</span>
+          </button>
           {isOperator ? (
             <>
-              <a href="/settings#usage" title="Live TinyFish wallet balance · open Usage & Infrastructure" className="sb-wallet" style={{ color: "inherit", textDecoration: "none" }}>
-                <Icon name="wallet" /> <span className="sb-foot-text">wallet </span>
-                <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b>
+              <a href="/settings#usage" title={`Live TinyFish wallet balance${wallet.bal ? ` $${wallet.bal}` : ""} · open Usage & Infrastructure`} aria-label="TinyFish wallet · open Usage & Infrastructure" className="sb-wallet sb-foot-item" style={{ color: "inherit", textDecoration: "none" }}>
+                <span className="sb-foot-icon" aria-hidden="true"><Icon name="wallet" /></span>
+                <span className="sb-foot-text">wallet <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b></span>
               </a>
-              <span className="sb-foot-text">
+              <span className="sb-foot-text sb-foot-line">
                 used <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> · no cap
               </span>
             </>
           ) : null}
           {roleReady && (
-            <button className="sb-role sb-foot-text" onClick={() => void switchTo(isOperator ? "citizen" : "operator")} title={roleError ?? undefined}>
-              {isOperator ? <><Icon name="user" /> {t("role_switch_citizen")}</> : <><Icon name="wrench" /> {t("role_switch_operator")}</>}
+            <button className="sb-role sb-foot-item" onClick={() => void switchTo(isOperator ? "citizen" : "operator")} title={roleError ?? t(isOperator ? "role_switch_citizen" : "role_switch_operator")} aria-label={t(isOperator ? "role_switch_citizen" : "role_switch_operator")}>
+              <span className="sb-foot-icon" aria-hidden="true"><Icon name={isOperator ? "user" : "wrench"} /></span>
+              <span className="sb-foot-text">{t(isOperator ? "role_switch_citizen" : "role_switch_operator")}</span>
             </button>
           )}
-          {roleError && <span className="sb-foot-text err-note" style={{ whiteSpace: "normal" }}>{roleError}</span>}
+          {roleError && <span className="sb-foot-text sb-foot-line err-note" style={{ whiteSpace: "normal" }}>{roleError}</span>}
         </div>
       </aside>
       <div className="sb-scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
@@ -187,7 +197,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="brand-word" style={{ fontSize: 13 }}>
             LokMitra
           </span>
-          <span className="chip" style={{ marginLeft: "auto" }}>
+          <ThemeToggle className="mobile-theme-toggle" />
+          <span className="chip">
             {isOperator ? (wallet.bal ? `$${wallet.bal}` : "—") : t(isOperator ? "role_operator" : "role_citizen")}
           </span>
         </div>

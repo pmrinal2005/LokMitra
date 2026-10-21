@@ -12,7 +12,7 @@ import { relayAct, relayCancel, relaySave, startRelay, type RelayView } from "./
 import { schemeById, SCHEMES, stateByCode, STATES } from "./schemes";
 import { ensureSentinel, listSentinels, subscribe } from "./sentinel";
 import { getUser, sessions, upsertUser } from "./store";
-import { botBaseUrl, inSimulator, mdToTg, tgAnswer, tgFile, tgPhoto, tgSend, tgTyping, type InlineKb } from "./telegram";
+import { botBaseUrl, mdToTg, tgAnswer, tgFile, tgPhoto, tgSend, tgTyping, type InlineKb } from "./telegram";
 import { clip, mask } from "./util";
 
 /**
@@ -174,7 +174,6 @@ async function onCommand(chat: string, userId: string, text: string, lang: strin
       return tgSend(chat, HELP, { html: true, keyboard: QUICK });
   }
   void lang;
-  void inSimulator;
 }
 
 async function runAsk(chat: string, userId: string, text: string, lang: string) {

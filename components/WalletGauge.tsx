@@ -108,7 +108,7 @@ export function WalletGauge({ data }: { data: DeckOverview | null }) {
           <text className="ceiling-label" x="104" y={TOP - 4} textAnchor="end">
             NO CAP · INFO ONLY
           </text>
-          <rect x="26" y={TOP + 8} width="6" height={BOT - TOP - 40} rx="3" fill="rgba(255,255,255,.06)" />
+          <rect x="26" y={TOP + 8} width="6" height={BOT - TOP - 40} rx="3" fill="rgba(var(--fog-rgb),.14)" />
         </svg>
       </div>
 

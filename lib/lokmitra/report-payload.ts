@@ -9,8 +9,8 @@ import { slipToken } from "./slip";
 /**
  * Shared helper: stored benefit_reports row → everything a channel needs to deliver it
  * (structured HTML e-mail + plain-text part + subject, slip link with HMAC token, QR).
- * Used by the e-mail route (POST send + GET preview), the Telegram /email + /report flows
- * and the Bot Simulator, so every channel renders the exact same Citizen Benefit Report.
+ * Used by the e-mail route (POST send + GET preview) and the Telegram /email + /report flows,
+ * so every channel renders the exact same Citizen Benefit Report.
  */
 export interface ReportPayload {
   report_id: string;
