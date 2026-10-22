@@ -37,12 +37,11 @@ export function CommandDeck() {
 
   const configured = data?.configured ?? true;
   const activeAgents = Math.max(data?.runs.active ?? 0, mission.state.running && mission.state.runId ? 1 : 0);
-  const connected = !error && !!data;
   const nodes = data?.nodes ?? [];
 
   return (
     <>
-      <GlassNav activeAgents={activeAgents} connected={connected} configured={configured} soundOn={sonar.enabled} onSound={sonar.toggle} calm={calm} onCalm={toggleCalm} isOperator={isOperator} />
+      <GlassNav soundOn={sonar.enabled} onSound={sonar.toggle} calm={calm} onCalm={toggleCalm} isOperator={isOperator} />
 
       <main className="deck" id="main">
         <h1 className="sr-only">LokMitra × TinyFish — Bioluminescent Command Deck</h1>

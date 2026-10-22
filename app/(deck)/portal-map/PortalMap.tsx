@@ -75,10 +75,7 @@ export function PortalMap() {
       <PageHead
         title="Live Portal Explorer"
         sub={<>Locate any official scheme portal <b>live, right now</b>. Each press runs a fresh TinyFish Search over the scheme’s official domains (government URLs change without notice), optionally a live Fetch of the pages it found, or a live Agent that maps a gated status / land-record checker. <b>Nothing is cached or stored</b> — pressing again repeats the whole live run.</>}
-      >
-        <span className="chip live">● live · no cache</span>
-        <span className="chip miss">Agent = live mapping</span>
-      </PageHead>
+      />
 
       <div className="grid-4">
         <Kpi label="last live search" value={latest ? `${latest.search.results.length} results` : "—"} sub={latest ? `${(latest.search.latency_ms / 1000).toFixed(1)} s · ${latest.portal.resolved_via}` : "press Resolve live"} tone="teal" />
@@ -140,7 +137,7 @@ export function PortalMap() {
         {latest && (
           <div className="section-card" style={{ marginTop: 12 }}>
             <h4>
-              {schemeName(latest.portal.scheme_id)} <span className="chip">{latest.portal.task}</span> <span className="chip live">● live {new Date(latest.at).toLocaleTimeString("en-IN")}</span> <span className="chip">{latest.portal.resolved_via}</span>
+              {schemeName(latest.portal.scheme_id)} <span className="chip">{latest.portal.task}</span> <span className="note">{new Date(latest.at).toLocaleTimeString("en-IN")}</span>
             </h4>
             <div className="note">search query: <code>{latest.search.query}</code></div>
             <div className="note">entry: <a href={latest.portal.entry_url} target="_blank" rel="noreferrer noopener">{latest.portal.entry_url}</a></div>

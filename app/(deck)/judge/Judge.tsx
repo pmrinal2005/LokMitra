@@ -30,7 +30,6 @@ const DEMO = "Main Nashik ka kisan hoon. PM-KISAN ki eligibility, aaj gehu ka ma
  */
 export function Judge() {
   const [tick, setTick] = useState<Tick | null>(null);
-  const [conn, setConn] = useState<"connecting" | "live" | "retrying">("connecting");
   const start = useRef<number | null>(null);
   const [history, setHistory] = useState<{ t: number; w: number }[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
@@ -45,14 +44,12 @@ export function Judge() {
       const d = JSON.parse((ev as MessageEvent).data) as Tick;
       lastTick.current = d;
       setTick(d);
-      setConn("live");
       if (d.wallet !== null) {
         if (start.current === null) start.current = d.wallet;
         setHistory((h) => [...h, { t: Date.now(), w: d.wallet! }].slice(-90));
       }
       if (d.live_run?.streaming_url) setPreview((p) => p ?? d.live_run!.streaming_url);
     });
-    es.onerror = () => setConn("retrying");
     return () => es.close();
   }, []);
 
@@ -113,10 +110,7 @@ export function Judge() {
 
   return (
     <div className="page">
-      <PageHead title="Judge Console" sub={<>Everything a judge needs on one screen. The live TinyFish Wallet counter (pushed over SSE, informational — there is no budget cap), live calls per TinyFish surface, the agent's live browser, and a two-farmer rehearsal proving <b>every query runs fully live — no caching anywhere</b>.</>}>
-        <span className={`chip ${conn === "live" ? "hit" : "miss"}`}>{conn === "live" ? "● SSE live" : conn}</span>
-        <span className="chip">{tick ? new Date(tick.at).toLocaleTimeString("en-IN") : "…"}</span>
-      </PageHead>
+      <PageHead title="Judge Console" sub={<>Everything a judge needs on one screen. The live TinyFish Wallet counter (pushed over SSE, informational — there is no budget cap), live calls per TinyFish surface, the agent's live browser, and a two-farmer rehearsal proving <b>every query runs fully live — no caching anywhere</b>.</>} />
 
       <div className="judge-grid">
         <Panel title="Wallet (live)" sub="GET /v1/wallet pushed every ~4 s">

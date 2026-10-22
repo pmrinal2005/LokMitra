@@ -29,7 +29,6 @@ export function Impact() {
   return (
     <div className="page">
       <PageHead title="Impact & Wallet" sub={<>Judge view, computed from LokMitra’s own audit log and the live TinyFish wallet. Every citizen query runs <b>fully live</b> (fresh Search → Fetch → Agent) — there is no cache and no budget cap; the wallet and usage figures are shown purely for transparency.</>}>
-        <span className="chip">store: {s?.backend ?? "…"}</span>
         <button className="btn sm" onClick={reload}><Icon name="refresh" /></button>
       </PageHead>
       {error && <p className="note err"><Icon name="alert" /> {error}</p>}

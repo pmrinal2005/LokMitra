@@ -23,18 +23,15 @@ interface Lang { code: string; name: string; native: string; speech: string; pri
 interface St { code: string; name: string; hindi: string }
 interface Confirm { confirm_id: string; report_id?: string; ready?: boolean; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
 interface Section { scheme_id: string; scheme_name: string; task: string; status: string; data: Record<string, unknown> | null; sources: string[]; diy: string[]; live?: boolean; portal_state: string; search?: { query: string; results: number; error?: string | null; latency_ms: number }; confirm?: Confirm; benefit?: string }
-interface SearchEv { scheme: string; task: string; state: string; query?: string; results: number; top?: string[]; resolved_via?: string; latency_ms?: number; error?: string | null }
 interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean; needs_captcha?: boolean; relay_id?: string | null; cost_usd?: number; step_rate?: number; video_url?: string | null; needs_input?: boolean }
 interface Turn {
   id: string;
   q: string;
   stages: string[];
-  searches: SearchEv[];
   pages: { url: string; title: string | null; chars: number; latency_ms?: number | null; error: string | null }[];
   sections: Section[];
   report?: { report_id: string; summary_local: string; summary_en: string; language: string; live_calls?: { search: number; fetch_urls: number; fetch_ok: number }; elapsed_ms?: number; follow_up?: boolean; structured?: StructuredReport | null };
   structured?: StructuredReport | null;
-  intent?: { intent: Record<string, unknown>; via: string };
   error?: string;
   done: boolean;
 }
@@ -128,7 +125,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
     const query = (q ?? text).trim();
     if (!query || busy) return;
     const id = `t${Date.now()}`;
-    setTurns((ts) => [...ts, { id, q: query, stages: [], searches: [], pages: [], sections: [], done: false }]);
+    setTurns((ts) => [...ts, { id, q: query, stages: [], pages: [], sections: [], done: false }]);
     setText("");
     setBusy(true);
     const ctrl = new AbortController();
@@ -139,12 +136,10 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
         { text: query, user_id: csc ? cscUserId(cscName) : citizenId(), language: lang, state_code: state || undefined, district: district || undefined, channel: csc ? "csc" : "web" },
         ({ event, data }) => {
           if (event === "stage") patchTurn(id, (t) => ({ ...t, stages: [...t.stages, String(data.message)] }));
-          else if (event === "intent") patchTurn(id, (t) => ({ ...t, intent: { intent: data.intent as Record<string, unknown>, via: String(data.via) } }));
-          else if (event === "search") patchTurn(id, (t) => ({ ...t, searches: [...t.searches, data as unknown as SearchEv] }));
           else if (event === "fetch") patchTurn(id, (t) => ({ ...t, pages: (data.pages as Turn["pages"]) ?? [] }));
           else if (event === "agent_task") {
             const c = data as unknown as Confirm;
-            // Agent = auto / live: start immediately, in parallel (no consent step). Missing identifiers stay as plain inputs.
+            // personal checks start immediately, in parallel (no consent step). Missing identifiers stay as plain inputs.
             if (c.ready) void runConfirm(c, c.report_id);
           } else if (event === "section") patchTurn(id, (t) => ({ ...t, sections: [...t.sections.filter((s) => !(s.scheme_id === data.scheme_id && s.task === data.task)), data as unknown as Section] }));
           else if (event === "structured") patchTurn(id, (t) => ({ ...t, structured: data as unknown as StructuredReport }));
@@ -220,10 +215,6 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
             Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Every question is answered live: TinyFish Search locates the official portal and Fetch reads it right now — nothing is cached, so repeat questions run in full again. Personal checks start a live TinyFish Agent automatically (in parallel) and stream every step, the cost and the live browser here.
           </p>
         </div>
-        <div className="row">
-          <span className="chip live">● 100% live · no cache</span>
-          <span className="chip live">Agent = auto / live</span>
-        </div>
       </header>
 
       {turns.length === 0 && (
@@ -252,22 +243,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     {i === t.stages.length - 1 && !t.done ? <Icon name="hourglass" size={11} /> : <Icon name="check" size={11} />} {s}
                   </span>
                 ))}
-                {t.intent && (
-                  <span>
-                    · intent via <b>{t.intent.via}</b>: {String((t.intent.intent.sub_queries as { scheme_id: string; task: string }[] | undefined)?.map((s) => `${s.scheme_id}/${s.task}`).join(", ") ?? "")}
-                    {t.intent.intent.state_code ? ` · state ${String(t.intent.intent.state_code)}` : ""}
-                  </span>
-                )}
               </div>
-              {t.searches.length > 0 && (
-                <div className="row" style={{ marginTop: 10 }}>
-                  {t.searches.map((c, i) => (
-                    <span key={i} className={`chip ${c.error ? "miss" : "live"}`} title={c.error ?? `${c.query ?? ""}${c.top?.length ? `\n${c.top.join("\n")}` : ""}`}>
-                      <Icon name="search" /> live Search · {c.results} result(s){c.latency_ms ? ` · ${(c.latency_ms / 1000).toFixed(1)}s` : ""} · {c.scheme} · {c.task} · {c.state}
-                    </span>
-                  ))}
-                </div>
-              )}
               {t.pages.length > 0 && (
                 <div className="note" style={{ marginTop: 8 }}>
                   Live TinyFish Fetch read {t.pages.filter((p) => !p.error && p.chars > 0).length}/{t.pages.length} official page(s) just now: {t.pages.map((p) => `${hostOf(p.url)}${p.error ? " (failed)" : ` (ok${p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""})`}`).join(" · ")}
@@ -280,10 +256,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                 const v = ids[c.confirm_id] ?? {};
                 return (
                   <div key={c.confirm_id} className="gate" style={{ marginTop: 12 }}>
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <b><Icon name="bot" /> {c.scheme_name} — personal {c.task} check</b>
-                      <span className="chip live" title="Live cost = steps × TinyFish step rate; there is no step limit or budget cap">● agent auto / live{run ? ` · ${run.steps} steps · ${fmtUsd(run.cost_usd ?? 0)}` : ""}</span>
-                    </div>
+                    <b><Icon name="bot" /> {c.scheme_name} — personal {c.task} check</b>
                     <span className="note">
                       {run?.running ? <>A TinyFish agent is working on <b>{hostOf(c.entry_url)}</b> right now. </> : run ? null : c.ready ? <>Starting a TinyFish agent on <b>{hostOf(c.entry_url)}</b>… </> : <>Enter the detail(s) below — the live TinyFish agent on <b>{hostOf(c.entry_url)}</b> starts the moment you submit. </>}It never submits anything. Your identifiers are used once, masked in logs.{c.requires_otp ? " This portal may send an OTP to your registered mobile." : ""}
                     </span>
@@ -358,7 +331,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                   <hr className="hr" style={{ margin: "12px 0" }} />
                   <div className="row" style={{ justifyContent: "space-between" }}>
                     <span className="note">
-                      ● live: {t.report.live_calls?.search ?? 0} Search · {t.report.live_calls?.fetch_ok ?? 0}/{t.report.live_calls?.fetch_urls ?? 0} pages fetched now · {((t.report.elapsed_ms ?? 0) / 1000).toFixed(1)}s · nothing cached
+                      {t.report.live_calls?.fetch_ok ?? 0} official page(s) checked · {((t.report.elapsed_ms ?? 0) / 1000).toFixed(1)}s
                     </span>
                     {!t.report.follow_up && (
                       <div className="row">
@@ -379,7 +352,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                     {t.sections.map((s) => (
                       <div key={`${s.scheme_id}:${s.task}`} className="section-card">
                         <h4>
-                          {s.scheme_name} <span className="chip">{s.task}</span> <span className="chip live">live{s.search ? ` · ${s.search.results} search results` : ""}</span> <span className="chip">{s.status}</span>
+                          {s.scheme_name} <span className="chip">{s.task}</span> <span className="chip">{s.status}</span>
                         </h4>
                         <pre className="mono note" style={{ whiteSpace: "pre-wrap", margin: 0, maxHeight: 220, overflow: "auto" }}>{JSON.stringify(s.data, null, 2)}</pre>
                         <div className="note">DIY: {s.diy.join(" → ")}</div>

@@ -45,7 +45,6 @@ export function UsageInfrastructure() {
             <h2 className="panel-title" id="ring-title">
               <span className="glyph" style={{ background: "var(--jade)", boxShadow: "0 0 10px var(--jade)" }} /> Live Execution
             </h2>
-            <span className="panel-sub">every call live · 0% cached</span>
           </header>
           <LiveRing data={data} />
         </section>

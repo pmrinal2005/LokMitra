@@ -8,7 +8,7 @@ import { useT } from "@/lib/i18n/client";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 
-type Item = { href: string; label: string; icon: React.ReactNode; badge?: { text: string; paid?: boolean }; operatorOnly?: boolean };
+type Item = { href: string; label: string; icon: React.ReactNode; operatorOnly?: boolean };
 
 const I = {
   deck: <path d="M3 12c3-6 6-6 9 0s6 6 9 0M3 7h4M17 17h4" />,
@@ -34,28 +34,28 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Citizen",
     items: [
-      { href: "/sahayak", label: "Sahayak", icon: svg(I.chat), badge: { text: "22 langs" } },
-      { href: "/csc", label: "CSC Desk", icon: svg(I.csc), badge: { text: "slip+QR" } },
-      { href: "/portal-map", label: "Portal Explorer", icon: svg(I.map), badge: { text: "live" } },
-      { href: "/reports", label: "Benefit Reports", icon: svg(I.doc), badge: { text: "email" } },
+      { href: "/sahayak", label: "Sahayak", icon: svg(I.chat) },
+      { href: "/csc", label: "CSC Desk", icon: svg(I.csc) },
+      { href: "/portal-map", label: "Portal Explorer", icon: svg(I.map) },
+      { href: "/reports", label: "Benefit Reports", icon: svg(I.doc) },
     ],
   },
   {
     title: "Operate",
     items: [
       { href: "/dashboard", label: "Mission Deck", icon: svg(I.deck) },
-      { href: "/live", label: "Live Browser", icon: svg(I.live), badge: { text: "$", paid: true } },
-      { href: "/sentinel", label: "Sentinel", icon: svg(I.bell), badge: { text: "monitor" } },
+      { href: "/live", label: "Live Browser", icon: svg(I.live) },
+      { href: "/sentinel", label: "Sentinel", icon: svg(I.bell) },
       { href: "/sessions", label: "Sessions", icon: svg(I.key) },
     ],
   },
   {
     title: "Judge",
     items: [
-      { href: "/judge", label: "Judge Console", icon: svg(I.judge), badge: { text: "live" } },
+      { href: "/judge", label: "Judge Console", icon: svg(I.judge) },
       { href: "/impact", label: "Impact & Wallet", icon: svg(I.chart) },
       { href: "/runs", label: "Runs Log", icon: svg(I.runs) },
-      { href: "/settings", label: "Settings", icon: svg(I.gear), badge: { text: "operator" }, operatorOnly: true },
+      { href: "/settings", label: "Settings", icon: svg(I.gear), operatorOnly: true },
     ],
   },
 ];
@@ -141,7 +141,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link key={it.href} href={it.href} className="sb-link" aria-current={active ? "page" : undefined} title={it.label}>
                     {it.icon}
                     <span className="sb-label">{it.label}</span>
-                    {it.badge ? <span className={`sb-badge ${it.badge.paid ? "paid" : ""}`}>{it.badge.text}</span> : <span />}
                   </Link>
                 );
               })}
@@ -198,9 +197,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             LokMitra
           </span>
           <ThemeToggle className="mobile-theme-toggle" />
-          <span className="chip">
-            {isOperator ? (wallet.bal ? `$${wallet.bal}` : "—") : t(isOperator ? "role_operator" : "role_citizen")}
-          </span>
         </div>
         {children}
       </div>

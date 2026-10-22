@@ -28,18 +28,12 @@ function Logomark() {
 }
 
 export function GlassNav({
-  activeAgents,
-  connected,
-  configured,
   soundOn,
   onSound,
   calm,
   onCalm,
   isOperator = false,
 }: {
-  activeAgents: number;
-  connected: boolean;
-  configured: boolean;
   soundOn: boolean;
   onSound: () => void;
   calm: boolean;
@@ -100,9 +94,6 @@ export function GlassNav({
     document.getElementById(id)?.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
   };
 
-  const state = !configured || !connected ? "offline" : activeAgents > 0 ? "live" : "idle";
-  const pulse = activeAgents > 0 ? `${Math.max(0.6, 1.8 - activeAgents * 0.3)}s` : "2.6s";
-
   return (
     <nav className={`glass-nav ${hidden ? "is-hidden" : ""}`} aria-label="Primary">
       <div className="brand">
@@ -123,16 +114,6 @@ export function GlassNav({
       </div>
 
       <div className="nav-right">
-        <span className={`live-chip ${state === "offline" ? "offline" : state === "idle" ? "idle" : ""}`} aria-live="polite">
-          <span className={`live-dot ${state !== "offline" ? "pulse" : ""}`} style={{ ["--pulse" as string]: pulse }} />
-          {state === "offline" ? (
-            <span>{configured ? "OFFLINE" : "NO API KEY"}</span>
-          ) : (
-            <span>
-              LIVE<span className="live-text-long"> · {activeAgents} agent{activeAgents === 1 ? "" : "s"} active</span>
-            </span>
-          )}
-        </span>
         <ThemeToggle />
         <button className="icon-btn" onClick={onSound} aria-pressed={soundOn} aria-label={soundOn ? "Mute ambient sound" : "Enable ambient sound"} title="Ambient sonar audio">
           {soundOn ? (

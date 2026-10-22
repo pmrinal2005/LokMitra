@@ -42,10 +42,7 @@ export function Reports() {
 
   return (
     <div className="page">
-      <PageHead title="Citizen Benefit Reports" sub={<>Every report below came from its <b>own complete live run</b> (fresh Search → Fetch → Agent). Open one to see the structured sector report, the exact Resend e-mail, and the printable CSC slip with QR + verification token.</>}>
-        <span className="chip live">● each report = 1 live run</span>
-        {mail && <span className={`chip ${mail.resend_configured ? "hit" : "miss"}`}>{mail.resend_configured ? "Resend configured" : "Resend not configured · preview only"}</span>}
-      </PageHead>
+      <PageHead title="Citizen Benefit Reports" sub={<>Every report below came from its <b>own complete live run</b> (fresh Search → Fetch → Agent). Open one to see the structured sector report, the exact Resend e-mail, and the printable CSC slip with QR + verification token.</>} />
 
       <div className="grid-4">
         <Kpi label="reports" value={reports.length} tone="teal" />

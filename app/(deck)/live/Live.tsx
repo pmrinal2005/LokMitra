@@ -86,9 +86,7 @@ export function Live() {
       <PageHead
         title="Live Browser"
         sub={<>A real TinyFish <b>Browser API</b> session driven over CDP from this dashboard — the judge-facing “watch it live” panel and the manual fallback for Bhulekh cascades and other edge cases. Agent runs stream their own live view on Sahayak / Portal Map via <code>streaming_url</code>.</>}
-      >
-        <span className="chip paid">Browser ≈ $0.002 / min</span>
-      </PageHead>
+      />
 
       <div className="grid-4">
         <Kpi label="open sessions" value={sessions.length} tone="teal" />

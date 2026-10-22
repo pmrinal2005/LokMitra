@@ -56,9 +56,7 @@ export function Sentinel() {
       <PageHead
         title="Deadline & Circular Sentinel"
         sub={<>TinyFish <b>Monitor</b> replaces the Agent for every “has anything changed?” question. One Monitor per scheme × state; each run costs $0.005 + a free Fetch/Search, and a single detected change fans out to <b>every</b> subscribed citizen on Telegram / e-mail.</>}
-      >
-        <span className="chip">Monitor ≈ 3× cheaper than 1 Agent step</span>
-      </PageHead>
+      />
 
       <div className="grid-4">
         <Kpi label="sentinels" value={rows.length} sub={`${rows.filter((r) => r.live?.status === "active").length} active at TinyFish`} tone="teal" />
