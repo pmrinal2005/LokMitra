@@ -4,7 +4,15 @@ export const metadata: Metadata = {
   title: "LokMitra | Every Government Benefit, In Your Own Language",
   description:
     "LokMitra finds every scheme you deserve, checks your status on official portals and explains it simply in your own language. Free for every citizen on Telegram, web and at your CSC.",
-  icons: { icon: "/favicon.svg" },
+  icons: {
+    icon: [
+      { url: "/logo.png", type: "image/png", sizes: "512x512" },
+      { url: "/favicon-64.png", type: "image/png", sizes: "64x64" },
+    ],
+    shortcut: "/favicon-64.png",
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+  },
+  openGraph: { title: "LokMitra", description: "Every government benefit, in your own language.", images: [{ url: "/logo.png", width: 512, height: 512, alt: "LokMitra logo" }] },
   manifest: "/manifest.webmanifest",
   applicationName: "LokMitra",
 };

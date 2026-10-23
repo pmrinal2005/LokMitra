@@ -2,15 +2,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { Icon } from "./Icon";
+import { BrandLogo } from "./BrandLogo";
 
 /** Shared dashboard primitives (no UI framework). */
 
 export function PageHead({ title, sub, children }: { title: string; sub?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <header className="page-head">
-      <div>
+      <div className="page-head-brand">
+        <BrandLogo size={44} decorative className="brand-logo-head" />
+        <div>
         <h1>{title}</h1>
         {sub && <p>{sub}</p>}
+        </div>
       </div>
       {children && <div className="row">{children}</div>}
     </header>

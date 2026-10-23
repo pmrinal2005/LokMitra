@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useT } from "@/lib/i18n/client";
 import { ThemeToggle } from "./ThemeToggle";
+import { BrandLogo } from "./BrandLogo";
 import type { UiKey } from "@/lib/i18n/ui-strings";
 
 /** In-page pills. "Wallet" is operator-only and deep-links to Settings → Usage & Infrastructure. */
@@ -13,19 +14,6 @@ export const NAV_ITEMS: { id: string; key: UiKey; href?: string; operatorOnly?: 
   { id: "sectors", key: "nav_sectors" },
   { id: "wallet", key: "nav_wallet", href: "/settings#usage", operatorOnly: true },
 ];
-
-function Logomark() {
-  // single-line fish swimming an infinite figure-8 inside its own bounding box (pure SVG/CSS)
-  return (
-    <svg className="logomark" viewBox="0 0 38 26" aria-hidden="true">
-      <path className="track" d="M19 13 C 27 3, 35 3, 35 13 C 35 23, 27 23, 19 13 C 11 3, 3 3, 3 13 C 3 23, 11 23, 19 13 Z" fill="none" strokeWidth="0.8" />
-      <g className="fish">
-        <path d="M-6 0 C -3 -3.4, 3 -3.4, 5 0 C 3 3.4, -3 3.4, -6 0 Z M-6 0 L -9 -2.6 L -9 2.6 Z" fill="none" stroke="#2EF2C3" strokeWidth="1.1" strokeLinejoin="round" style={{ filter: "drop-shadow(0 0 3px #2EF2C3)" }} />
-        <circle cx="2.2" cy="-0.6" r="0.7" fill="#FFB44F" />
-      </g>
-    </svg>
-  );
-}
 
 export function GlassNav({
   soundOn,
@@ -96,13 +84,13 @@ export function GlassNav({
 
   return (
     <nav className={`glass-nav ${hidden ? "is-hidden" : ""}`} aria-label="Primary">
-      <div className="brand">
-        <Logomark />
+      <a className="brand" href="/" aria-label="LokMitra home" title="Back to the LokMitra home page">
+        <BrandLogo size={38} decorative priority className="brand-logo-nav" />
         <div className="brand-word">
           LokMitra
           <small>× TinyFish command deck</small>
         </div>
-      </div>
+      </a>
 
       <div className="nav-pills" ref={pillsRef} role="tablist">
         <span className="nav-droplet" style={{ left: drop.left, width: drop.width }} aria-hidden="true" />

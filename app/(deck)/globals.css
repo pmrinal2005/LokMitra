@@ -142,10 +142,25 @@ button { font: inherit; color: inherit; }
 .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .brand-word { font-family: var(--font-display); font-weight: 600; letter-spacing: .14em; font-size: 14px; text-transform: uppercase; }
 .brand-word small { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; color: var(--fog); font-weight: 400; text-transform: none; }
-.logomark { width: 38px; height: 26px; overflow: visible; }
-.logomark .fish { offset-path: path("M19 13 C 27 3, 35 3, 35 13 C 35 23, 27 23, 19 13 C 11 3, 3 3, 3 13 C 3 23, 11 23, 19 13 Z"); offset-rotate: auto; animation: figure8 6s linear infinite; }
-.logomark .track { stroke: rgba(46,242,195,.12); }
-@keyframes figure8 { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+a.brand { color: inherit; text-decoration: none; }
+/* ---------- official brand logo (public/logo.png) ---------- */
+.brand-logo {
+  display: block; flex: none; width: var(--logo-size, 36px); height: var(--logo-size, 36px);
+  object-fit: contain; user-select: none; -webkit-user-drag: none;
+  filter: drop-shadow(0 0 10px rgba(46,242,195,.18)) drop-shadow(0 2px 6px rgba(var(--shadow-rgb),.35));
+  transition: transform .35s var(--water), width .35s var(--water), height .35s var(--water);
+}
+a:hover > .brand-logo, .brand:hover > .brand-logo { transform: scale(1.06) rotate(-2deg); }
+.mobile-brand { display: inline-flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; min-width: 0; }
+@media (max-width: 860px) { .brand-logo-nav { --logo-size: 32px !important; } }
+@media (max-width: 380px) { .brand-logo-mobile { --logo-size: 26px !important; } .brand-logo-nav { --logo-size: 28px !important; } }
+/* large brand mark used by the loading screen / 404 */
+.brand-splash { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 14px; text-align: center; position: relative; z-index: 1; }
+.brand-splash .brand-logo { width: clamp(72px, 18vw, 120px); height: clamp(72px, 18vw, 120px); animation: logoBreathe 2.4s ease-in-out infinite; }
+@keyframes logoBreathe { 0%,100% { transform: scale(1); opacity: .92; } 50% { transform: scale(1.06); opacity: 1; } }
+html.calm .brand-splash .brand-logo { animation: none; }
+.slip-brand { display: flex; align-items: center; gap: 12px; }
+.slip-brand .brand-logo { filter: none; }
 
 .nav-pills { position: relative; display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(var(--bg-rgb),.35); }
 .nav-pill {
@@ -537,10 +552,14 @@ button { font: inherit; color: inherit; }
    TICKER
    ========================================================================== */
 .ticker-panel { padding: 12px 0; }
-.ticker { display: flex; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
-.ticker-track { display: flex; gap: 0; flex-shrink: 0; animation: marquee var(--dur, 60s) linear infinite; padding-right: 0; }
-.ticker:hover .ticker-track { animation-play-state: paused; }
-@keyframes marquee { to { transform: translateX(-100%); } }
+/* JS (rAF) driven marquee — see components/ImpactTicker.tsx. No CSS animation, so Calm Mode's
+   global animation override and 6–15 s telemetry re-renders can't freeze or reset it. */
+.ticker-wrap { position: relative; display: flex; align-items: center; gap: 8px; padding-right: 12px; }
+.ticker { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; outline: none; mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.ticker:focus-visible { box-shadow: 0 0 0 2px var(--teal) inset; border-radius: 10px; }
+.ticker-rail { display: flex; width: max-content; will-change: transform; transform: translate3d(0,0,0); }
+.ticker-track { display: flex; gap: 0; flex-shrink: 0; padding-right: 0; }
+.ticker-ctl { flex: none; width: 28px; height: 28px; }
 .tick-item { display: inline-flex; align-items: center; gap: 10px; padding: 0 22px; white-space: nowrap; font-size: 13.5px; color: var(--ink-soft); }
 .tick-item .ic { font-size: 14px; }
 .tick-item .where { font-family: var(--font-mono); font-size: 10.5px; color: var(--fog); }
@@ -564,8 +583,7 @@ html.calm *, html.calm *::before, html.calm *::after {
 }
 html.calm .panel { opacity: 1; transform: none; filter: none; }
 html.calm .abyss-layer::before, html.calm .caustics, html.calm .radar, html.calm .sonar-sweep { display: none; }
-html.calm .ticker-track { animation: none !important; }
-html.calm .ticker { overflow-x: auto; }
+/* calm mode: ticker keeps scrolling at half speed (handled in JS); user can pause via the button */
 
 @media (prefers-reduced-motion: reduce) {
   .abyss-layer::before { animation: none; }
@@ -1216,8 +1234,7 @@ html[data-theme="light"] .tone-free .g { text-shadow: none; }
 html[data-theme="light"] .icon-btn { background: rgba(255,255,255,.7); }
 html[data-theme="light"] .sb-lang-select option,
 html[data-theme="light"] .select option { background: #fff; color: var(--pearl); }
-html[data-theme="light"] .logomark .track { stroke: rgba(8,149,122,.3); }
-html[data-theme="light"] .logomark .fish path { stroke: var(--teal); filter: none !important; }
+html[data-theme="light"] .brand-logo { filter: drop-shadow(0 2px 6px rgba(15,40,80,.14)); }
 .theme-toggle svg { transition: transform .5s var(--water); }
 .theme-toggle:hover svg { transform: rotate(20deg); }
 
@@ -1228,3 +1245,11 @@ html[data-theme="light"] .logomark .fish path { stroke: var(--teal); filter: non
 .agent-verified b { font-weight: 600; }
 .agent-kind { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--hair-strong); color: var(--fog); font-family: var(--font-mono); }
 .agent-kind.verify { color: var(--saffron); border-color: var(--saffron); }
+
+/* collapsed rail: logo shrinks to fit the 76px rail */
+@media (min-width: 961px) { .shell.collapsed .brand-logo-sb { --logo-size: 36px !important; } }
+/* page headers: brand logo beside the title */
+.page-head-brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.page-head-brand > div { min-width: 0; }
+@media (max-width: 600px) { .brand-logo-head { --logo-size: 34px !important; } .page-head-brand { gap: 10px; align-items: flex-start; } }
+@media print { .brand-logo-head { display: none; } }

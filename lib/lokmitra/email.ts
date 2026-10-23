@@ -5,6 +5,16 @@ import type { StructuredReport } from "./report-shape";
 import { keyLabel, reportToMarkdown, reportHost, sectorLabel, sortSectors, statusLabel, verdictLabel } from "./report-shape";
 import { L } from "./glossary";
 
+/** Absolute URL of the official brand logo (public/logo.png) for e-mail clients; null when no public base URL is known. */
+function logoUrl(): string | null {
+  const base = cfg.publicBaseUrl();
+  return base ? `${base}/logo.png` : null;
+}
+const logoImg = (size: number) => {
+  const u = logoUrl();
+  return u ? `<img src="${u}" width="${size}" height="${size}" alt="LokMitra" style="display:inline-block;vertical-align:middle;border:0;outline:none;margin-right:10px">` : "";
+};
+
 /** Resend (free tier) — Citizen Benefit Report e-mails + sentinel alerts. */
 export async function sendEmail(opts: { to: string; subject: string; html: string; text?: string }): Promise<{ id: string | null; error?: string }> {
   const key = cfg.resendKey();
@@ -54,7 +64,7 @@ function inline(s: string) {
 
 export function reportEmailHtml(r: { summary_local: string; summary_en: string; language: string; sources: string[]; report_id: string; link?: string }) {
   return `<!doctype html><html><body style="font-family:system-ui,-apple-system,'Noto Sans Devanagari',sans-serif;max-width:640px;margin:auto;padding:20px;color:#111">
-  <h1 style="font-size:20px;margin:0 0 4px">LokMitra · Citizen Benefit Report</h1>
+  <h1 style="font-size:20px;margin:0 0 4px">${logoImg(40)}LokMitra · Citizen Benefit Report</h1>
   <div style="color:#666;font-size:12px;margin-bottom:16px">Report ${esc(r.report_id)} · ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST</div>
   ${mdToHtml(r.summary_local)}
   ${r.language !== "en" ? `<hr style="margin:20px 0;border:0;border-top:1px solid #ddd"><details><summary style="cursor:pointer;color:#666">English version</summary>${mdToHtml(r.summary_en)}</details>` : ""}
@@ -109,7 +119,7 @@ export function structuredEmailHtml(o: { r: StructuredReport; lang: string; repo
 <table role="presentation" width="100%" style="border-collapse:collapse"><tr><td align="center" style="padding:20px 10px">
 <table role="presentation" width="100%" style="max-width:680px;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden">
 <tr><td style="background:#06243a;color:#fff;padding:16px 20px">
-  <div style="font-size:12px;letter-spacing:.2em;color:#2EF2C3">LOKMITRA × TINYFISH</div>
+  <div style="font-size:12px;letter-spacing:.2em;color:#2EF2C3">${logoImg(36)}LOKMITRA × TINYFISH</div>
   <div style="font-size:20px;font-weight:700;margin-top:2px">${esc(L("title", lang))}</div>
   <div style="font-size:12px;color:#b8c7d4;margin-top:4px">#${esc(o.report_id.slice(0, 8))} · ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST${r.state_code ? ` · ${esc(r.state_code)}` : ""}${r.persona ? ` · ${esc(r.persona)}` : ""}</div>
 </td></tr>

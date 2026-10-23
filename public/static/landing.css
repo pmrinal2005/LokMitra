@@ -689,3 +689,11 @@ html.reveal-active #bottom-blur { opacity: 0; }
   #dash-veil { transition: none; }
   .dash-veil-label { animation: none; opacity: 1; }
 }
+
+/* Official brand logo (public/logo.png) inside the header pills */
+.logo-pill .logo-img { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; display: block; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
+.logo-pill-m .logo-img { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; display: block; filter: drop-shadow(0 1px 3px rgba(0,0,0,.35)); }
+.logo-pill { padding: 0 18px 0 12px; }
+.logo-pill-m { width: 122px; padding: 0 10px 0 8px; }
+.logo-pill-m.collapsed { width: 0; padding: 0; }
+#main-header.on-light .logo-pill .logo-img, #main-header.on-light .logo-pill-m .logo-img { filter: none; }

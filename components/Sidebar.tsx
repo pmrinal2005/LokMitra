@@ -7,6 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useT } from "@/lib/i18n/client";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
+import { BrandLogo } from "./BrandLogo";
 
 type Item = { href: string; label: string; icon: React.ReactNode; operatorOnly?: boolean };
 
@@ -60,18 +61,6 @@ const GROUPS: { title: string; items: Item[] }[] = [
   },
 ];
 
-function Logomark() {
-  return (
-    <svg className="logomark" viewBox="0 0 38 26" aria-hidden="true">
-      <path className="track" d="M19 13 C 27 3, 35 3, 35 13 C 35 23, 27 23, 19 13 C 11 3, 3 3, 3 13 C 3 23, 11 23, 19 13 Z" fill="none" strokeWidth="0.8" />
-      <g className="fish">
-        <path d="M-6 0 C -3 -3.4, 3 -3.4, 5 0 C 3 3.4, -3 3.4, -6 0 Z M-6 0 L -9 -2.6 L -9 2.6 Z" fill="none" stroke="#2EF2C3" strokeWidth="1.1" strokeLinejoin="round" />
-        <circle cx="2.2" cy="-0.6" r="0.7" fill="#FFB44F" />
-      </g>
-    </svg>
-  );
-}
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname() || "/";
   const [collapsed, setCollapsed] = useState(false);
@@ -119,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar" aria-label="LokMitra navigation">
         <div className="sb-brand">
           <a href="/" title="Back to the LokMitra home page" aria-label="LokMitra home" style={{ display: "contents", color: "inherit" }}>
-            <Logomark />
+            <BrandLogo size={40} decorative priority className="brand-logo-sb" />
             <div className="brand-word">
               LokMitra
               <small>citizen web sahayak</small>
@@ -192,10 +181,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
-          <Logomark />
-          <span className="brand-word" style={{ fontSize: 13 }}>
-            LokMitra
-          </span>
+          <a href="/" className="mobile-brand" aria-label="LokMitra home">
+            <BrandLogo size={30} decorative priority className="brand-logo-mobile" />
+            <span className="brand-word" style={{ fontSize: 13 }}>
+              LokMitra
+            </span>
+          </a>
           <ThemeToggle className="mobile-theme-toggle" />
         </div>
         {children}

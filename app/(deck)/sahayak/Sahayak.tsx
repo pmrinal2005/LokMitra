@@ -1,4 +1,5 @@
 "use client";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, citizenId, fmtUsd, hostOf, ssePost } from "@/lib/client";
 import { mdToHtml } from "@/lib/md";
@@ -212,11 +213,14 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
         </section>
       )}
       <header className="page-head">
-        <div>
+        <div className="page-head-brand">
+          <BrandLogo size={44} decorative className="brand-logo-head" />
+          <div>
           <h1>{csc ? "CSC Sahayak Desk" : "LokMitra Sahayak"}</h1>
           <p>
             Ask in your own language — by voice or text — about PM-KISAN, Ayushman, e-Shram, scholarships, ration, pension, land records or mandi prices. Every question is answered live: TinyFish Search locates the official portal and Fetch reads it right now — nothing is cached, so repeat questions run in full again. Personal checks start a live TinyFish Agent automatically (in parallel) and stream every step, the cost and the live browser here.
           </p>
+          </div>
         </div>
       </header>
 

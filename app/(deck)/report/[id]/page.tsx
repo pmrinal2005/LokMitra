@@ -12,6 +12,7 @@ import { slipToken, verifySlip } from "@/lib/lokmitra/slip";
 import { mdToHtml } from "@/lib/md";
 import { PrintButton } from "./PrintButton";
 import { Icon } from "@/components/Icon";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Citizen Benefit Report — LokMitra", robots: { index: false } };
@@ -78,12 +79,15 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           </div>
         )}
         <header style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-          <div>
+          <div className="slip-brand">
+            <BrandLogo size={52} decorative priority />
+            <div>
             <h1>LokMitra · {L("title", viewLang)}</h1>
             <div className="meta">
               #{id.slice(0, 8)} · {created} IST · {lang}
               {structured?.state_code ? ` · ${structured.state_code}` : ""}
               {structured?.persona ? ` · ${structured.persona}` : ""}
+            </div>
             </div>
           </div>
           <div className="meta" style={{ textAlign: "right" }}>
