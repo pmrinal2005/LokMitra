@@ -5,8 +5,8 @@ import { db, safe, type Row } from "./db";
 import { drainAgent, rates, run_agent_goal, type AgentEvent, type AgentGoal, type AgentOutcome } from "./ops";
 import { resolvePortalLive } from "./portal";
 import { relayGet, type RelayData } from "./relay";
-import { DISCOVERY_SCHEMA, LAND_SCHEMA, schemeById, stateByCode, STATUS_SCHEMA, type TaskKind } from "./schemes";
-import { logRun, sessions } from "./store";
+import { DISCOVERY_SCHEMA, LAND_SCHEMA, schemeById, stateByCode, STATUS_SCHEMA, VERIFY_SCHEMA, type TaskKind } from "./schemes";
+import { logRun, sessions, type SessionRow } from "./store";
 import { clip, hostOf, nowIso, unseal } from "./util";
 
 export interface DiscoveryResult {
@@ -81,6 +81,44 @@ function discoveryGoal(schemeName: string, entry: string, task: TaskKind) {
   ].join("\n");
 }
 
+/**
+ * Guaranteed live "verify" Agent goal — the Sahayak journey's Live Agent step.
+ *  page: open the official page in a real browser and read the facts the citizen asked about (no form submission)
+ *  map : open the gated status checker and map its inputs / OTP / CAPTCHA (no personal data entered)
+ */
+function verifyGoal(o: { schemeName: string; entry: string; mode: "page" | "map"; subTask: string; question: string; commodity?: string | null; district?: string | null; stateName: string }) {
+  const host = hostOf(o.entry);
+  if (o.mode === "map") {
+    return [
+      `Open the official ${o.schemeName} portal at ${o.entry} in the browser and map its beneficiary / application STATUS checker as it is live right now.`,
+      `The citizen asked: "${o.question}". Their personal identifiers are not available yet, so DO NOT type any personal data and DO NOT submit any form.`,
+      "1. Find the status / know-your-status page (follow menu links if needed). Record its URL in status_page_url.",
+      "2. List every visible input field label in input_fields (e.g. Registration number, Aadhaar, Mobile, CAPTCHA, Get OTP).",
+      "3. Set requires_otp / requires_captcha from what you see.",
+      "4. Also read 2-6 useful public facts visible on the portal (helpline, benefit amount, latest notice, eligibility) into verified_facts as {label, value}.",
+      "5. If the site does not load set blocked_by=\"site_down\"; otherwise blocked_by=\"none\".",
+      NO_SUBMIT,
+      "Be quick: use at most 8 browser actions, then stop. Return JSON matching the output schema; use null / [] for anything not shown.",
+    ].join("\n");
+  }
+  const focus =
+    o.subTask === "price"
+      ? `the latest mandi prices${o.commodity ? ` for ${o.commodity}` : ""}${o.district ? ` near ${o.district}` : ""} (market, modal price, unit, date) into prices`
+      : o.subTask === "deadline"
+        ? "the current last date / deadline and the latest notice or circular (title + date) into deadline and latest_notice"
+        : "the benefit, eligibility, documents required, how to apply / deadline and the helpline";
+  return [
+    `Open the official page ${o.entry} (${host}) in the browser and read it live, right now, for a citizen of ${o.stateName}.`,
+    `The citizen asked: "${o.question}".`,
+    `1. Read the page (scroll if needed; if the page is only a landing page, follow at most 2 obvious links on ${host} to the ${o.schemeName} details).`,
+    `2. Extract ${focus}.`,
+    "3. Put 3-10 short, concrete facts you actually saw on the page into verified_facts as {label, value} (amounts, dates, numbers, names) — never invent anything.",
+    "4. Record the page title and the exact URL you read in page_title / official_url. If the site does not load set blocked_by=\"site_down\", otherwise blocked_by=\"none\".",
+    NO_SUBMIT,
+    "Be quick: use at most 8 browser actions (prefer reading over clicking), then stop. Return JSON matching the output schema; use null / [] for anything not shown.",
+  ].join("\n");
+}
+
 async function runSteps(runId: string | null): Promise<string[]> {
   if (!runId) return [];
   try {
@@ -133,7 +171,13 @@ export async function* discover(opts: { scheme_id: string; state_code: string; t
 /* ================================================================== */
 interface ConfirmData extends Record<string, unknown> {
   scheme_id: string;
-  task: "status" | "land";
+  task: "status" | "land" | "verify";
+  mode?: "page" | "map" | "personal";
+  sub_task?: string;
+  fallback_url?: string | null;
+  question?: string;
+  commodity?: string | null;
+  district?: string | null;
   state_code: string;
   entry_url: string;
   est_steps: number;
@@ -144,10 +188,19 @@ interface ConfirmData extends Record<string, unknown> {
 }
 
 export async function* runConfirmed(
-  opts: { confirm_id: string; identifiers?: Record<string, string>; relay_id?: string | null; report_id?: string | null },
+  opts: { confirm_id: string; identifiers?: Record<string, string>; relay_id?: string | null; report_id?: string | null; token?: string | null },
   signal?: AbortSignal,
 ): AsyncGenerator<FlowEvent, AgentOutcome | null> {
-  const c = await sessions.get<ConfirmData>(opts.confirm_id);
+  let c = await sessions.get<ConfirmData>(opts.confirm_id);
+  // serverless: /ask and /confirm can land on different instances (memory store) → restore from the sealed task token
+  if (!c && opts.token) {
+    const t = unseal<SessionRow<ConfirmData>>(opts.token);
+    if (t && t.id === opts.confirm_id && t.kind === "confirm" && String(t.expires_at) > nowIso()) {
+      c = t;
+      const ttl = Math.max(30, Math.floor((Date.parse(String(t.expires_at)) - Date.now()) / 1000));
+      await sessions.put("confirm", t.data, ttl, { id: t.id, user_id: t.user_id }).catch(() => null);
+    }
+  }
   if (!c || c.kind !== "confirm") {
     yield { type: "LM_ERROR", error: "This confirmation has expired. Please ask again." };
     return null;
@@ -157,6 +210,9 @@ export async function* runConfirmed(
     return null;
   }
   const scheme = schemeById(c.data.scheme_id)!;
+  if (c.data.task === "verify") {
+    return yield* runVerify(opts.confirm_id, c, opts.report_id ?? null, signal);
+  }
   const ids: Record<string, string> = { ...(unseal<Record<string, string>>(c.data.sealed) ?? {}), ...Object.fromEntries(Object.entries(opts.identifiers ?? {}).filter(([, v]) => typeof v === "string" && v.trim()).map(([k, v]) => [k, String(v).trim().slice(0, 80)])) };
   const task = c.data.task;
   const hints = "";
@@ -269,6 +325,111 @@ export async function* runConfirmed(
   return out;
 }
 
+/* ================================================================== */
+/* Guaranteed live "verify" Agent (the journey's Live Agent step)      */
+/* ================================================================== */
+async function* runVerify(confirmId: string, c: SessionRow<ConfirmData>, reportIdIn: string | null, signal?: AbortSignal): AsyncGenerator<FlowEvent, AgentOutcome | null> {
+  const scheme = schemeById(c.data.scheme_id)!;
+  const mode = c.data.mode === "map" ? "map" : "page";
+  await sessions.patch<ConfirmData>(confirmId, { used: true });
+  const r = await rates();
+  yield { type: "LM_STAGE", message: `Live TinyFish Agent spawned · ${mode === "map" ? "mapping the status checker" : "reading the official page"} · step rate $${r.step.toFixed(3)} · typical ${c.data.est_steps} steps`, step_rate_usd: r.step };
+  const stateName = stateByCode(c.data.state_code || "IN").name;
+  const urls = [c.data.entry_url, c.data.fallback_url, scheme.entry].filter((u, i, a): u is string => !!u && /^https?:\/\//.test(u) && a.indexOf(u) === i).slice(0, 2);
+  let out: AgentOutcome | null = null;
+  let entry = urls[0] ?? scheme.entry;
+  for (let attempt = 0; attempt < urls.length; attempt++) {
+    entry = urls[attempt];
+    if (attempt > 0) yield { type: "LM_STAGE", message: `First portal page did not load — the agent is retrying on ${hostOf(entry)}…` };
+    yield { type: "LM_STAGE", message: `TinyFish agent is opening ${hostOf(entry)} in a real browser now…`, host: hostOf(entry) };
+    const goal: AgentGoal = {
+      url: entry,
+      goal: verifyGoal({ schemeName: scheme.name, entry, mode, subTask: String(c.data.sub_task ?? "info"), question: String(c.data.question ?? scheme.name), commodity: c.data.commodity, district: c.data.district, stateName }),
+      output_schema: VERIFY_SCHEMA as unknown as Record<string, unknown>,
+      purpose: mode === "map" ? "verify_map" : "verify_page",
+      scheme_id: scheme.id,
+      state_code: c.data.state_code,
+      browser_profile: "stealth",
+      // functional wall-clock guard so the run (and a possible fallback) fits one Vercel request — not a cost cap
+      max_duration_seconds: attempt === 0 ? Math.min(cfg.agentMaxDurationSec() || 150, 150) : 90,
+    };
+    const gen = run_agent_goal(goal, signal);
+    while (true) {
+      const n = await gen.next();
+      if (n.done) {
+        out = n.value;
+        break;
+      }
+      yield n.value;
+    }
+    const res0 = unwrap(out!.result);
+    const down = !res0 || res0.blocked_by === "site_down" || res0.blocked_by === "not_found";
+    if ((out!.status === "COMPLETED" && !down) || signal?.aborted || out!.status === "CANCELLED") break;
+  }
+  if (!out) {
+    yield { type: "LM_ERROR", error: "The live agent could not start." };
+    return null;
+  }
+  const raw = unwrap(out.result);
+  const result = raw ? { ...raw, mode, sub_task: c.data.sub_task ?? "info", entry_url: entry } : null;
+  const reportId = reportIdIn || c.data.report_id;
+  if (reportId) await attachAgentResult(reportId, { scheme_id: scheme.id, task: String(c.data.sub_task ?? "info"), kind: "verify", mode, run_id: out.run_id, status: out.status, result, cost_usd: out.cost_usd, at: nowIso() });
+
+  let video_url: string | null = null;
+  if (out.run_id) {
+    for (let i = 0; i < 3 && !video_url; i++) {
+      if (i) await new Promise((res) => setTimeout(res, 2000));
+      try {
+        const run = await tf<TfRun>("agent", `/v1/runs/${out.run_id}`, { query: { screenshots: "none", html: "none" }, timeoutMs: 10_000 });
+        video_url = run.video_url ?? null;
+      } catch {
+        /* keep trying */
+      }
+    }
+  }
+  yield {
+    type: "LM_RESULT",
+    retry_confirm_id: null,
+    scheme_id: scheme.id,
+    scheme_name: scheme.name,
+    task: "verify",
+    mode,
+    sub_task: c.data.sub_task ?? "info",
+    run_id: out.run_id,
+    status: out.status,
+    result,
+    cost_usd: out.cost_usd,
+    steps: out.steps,
+    streaming_url: out.streaming_url,
+    video_url,
+    step_rate_usd: r.step,
+    needs_otp: false,
+    needs_captcha: false,
+    profile_hint: out.profile_hint ?? null,
+    error: out.status === "COMPLETED" ? null : out.error ?? `agent ${out.status}`,
+    diy: scheme.diy,
+    sources: [entry],
+  };
+  void logRun({ surface: "agent", purpose: `verify_${mode}_result`, scheme_id: scheme.id, state_code: c.data.state_code, run_id: out.run_id, cost_usd: 0, meta: { summary: clip(JSON.stringify(result ?? {}), 200) } });
+  return out;
+}
+
+/** TinyFish returns either the schema object or { result: {...} } (sometimes a JSON string) — normalise. */
+function unwrap(v: unknown): Record<string, unknown> | null {
+  let x: unknown = v;
+  if (typeof x === "string") {
+    try {
+      x = JSON.parse(x);
+    } catch {
+      return { raw_message: clip(String(v), 600), verified_facts: [] };
+    }
+  }
+  if (!x || typeof x !== "object") return null;
+  const o = Object.fromEntries(Object.entries(x as Record<string, unknown>).map(([k, val]) => [k, typeof val === "string" && /^\s*(null|n\/a|undefined)\s*$/i.test(val) ? null : val]));
+  if (o.result && typeof o.result === "object" && !Array.isArray(o.result)) return o.result as Record<string, unknown>;
+  if (typeof o.result === "string") return unwrap(o.result);
+  return o;
+}
 
 /**
  * Append an Agent result to the stored report. Agents now start automatically while the report is still being
@@ -276,10 +437,10 @@ export async function* runConfirmed(
  * concurrent read-modify-write races.
  */
 async function attachAgentResult(reportId: string, entry: Record<string, unknown>) {
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 6; i++) {
     const rep = await safe(db.one<Row>("benefit_reports", { eq: { id: reportId } }), null);
     if (!rep) {
-      await new Promise((r) => setTimeout(r, 2500));
+      await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
     for (let k = 0; k < 4; k++) {

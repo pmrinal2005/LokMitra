@@ -30,7 +30,7 @@ export interface ReportItem {
   diy: string[];
   diy_local?: string[];
   confirm?: { confirm_id: string; est_steps: number; est_cost_usd: number; entry_url: string; requires_otp: boolean | null } | null;
-  agent?: { status: string; blocked_by?: string | null; registration_status?: string | null; cost_usd?: number } | null;
+  agent?: { status: string; blocked_by?: string | null; registration_status?: string | null; cost_usd?: number; kind?: "verify" | "personal"; mode?: string | null; verified?: { label: string; value: string }[]; run_id?: string | null } | null;
 }
 
 export interface ReportSectorBlock {
@@ -188,19 +188,58 @@ export function reportOneLiner(r: StructuredReport, lang: string) {
 
 export { host as reportHost };
 
-/** Overlay live Agent results (added after the report was written) onto the structured report. */
-export function overlayAgentResults(r: StructuredReport, agentResults: { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; cost_usd?: number }[] = []): StructuredReport {
+export interface OverlayAgentResult { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; cost_usd?: number; kind?: string; mode?: string; run_id?: string | null }
+
+/** False for empty / placeholder values an Agent writes when a field is not on the page ("NA", "not mentioned"…). */
+export function meaningful(v: unknown): v is string {
+  if (typeof v !== "string" && typeof v !== "number") return false;
+  const t = String(v).trim();
+  return !!t && !/^(n\/?a|na|nil|none|null|undefined|-+|—|not (available|applicable|found|shown|displayed|mentioned|specified|stated|visible)\b.*|no (deadline|notice|helpline|information|info|data)\b.*)$/i.test(t);
+}
+
+/** Facts a live "verify" Agent actually saw on the official portal — sanitised {label, value} list. */
+export function verifiedFactsOf(res: Record<string, unknown> | null | undefined, max = 8): { label: string; value: string }[] {
+  const arr = Array.isArray(res?.verified_facts) ? (res!.verified_facts as { label?: unknown; value?: unknown }[]) : [];
+  return arr
+    .filter((f) => f && typeof f.label === "string" && meaningful(f.value))
+    .slice(0, max)
+    .map((f) => ({ label: String(f.label).slice(0, 80), value: String(f.value).slice(0, 240) }));
+}
+
+/**
+ * Overlay live Agent results (added after the report was written) onto the structured report.
+ * Personal status / land checks win for the item status; the guaranteed live "verify" Agent enriches the item with
+ * the facts it actually read on the official portal (never pretending to be a personal status check).
+ */
+export function overlayAgentResults(r: StructuredReport, agentResults: OverlayAgentResult[] = []): StructuredReport {
   if (!agentResults.length) return r;
   const copy: StructuredReport = JSON.parse(JSON.stringify(r));
   for (const s of copy.sectors) {
     for (const it of s.items) {
-      const a = agentResults.filter((x) => x.scheme_id === it.scheme_id && x.task === it.task).pop();
-      if (!a) continue;
-      const res = a.result ?? {};
-      const blocked = (res.blocked_by as string) ?? null;
-      it.agent = { status: a.status, blocked_by: blocked, registration_status: (res.registration_status as string) ?? null, cost_usd: Number(a.cost_usd ?? 0) };
-      it.status = blocked && blocked !== "none" ? (blocked === "otp" ? "needs_otp" : "partial") : a.status === "COMPLETED" ? "ok" : "error";
-      if (res.registration_status && !it.facts.some((f) => f.key === "status")) it.facts.unshift({ key: "status", value: String(res.registration_status) });
+      const mine = agentResults.filter((x) => x.scheme_id === it.scheme_id && x.task === it.task);
+      const a = mine.filter((x) => x.kind !== "verify").pop();
+      const v = mine.filter((x) => x.kind === "verify").pop();
+      if (a) {
+        const res = a.result ?? {};
+        const blocked = (res.blocked_by as string) ?? null;
+        it.agent = { status: a.status, blocked_by: blocked, registration_status: (res.registration_status as string) ?? null, cost_usd: Number(a.cost_usd ?? 0), kind: "personal", run_id: a.run_id ?? null };
+        it.status = blocked && blocked !== "none" ? (blocked === "otp" ? "needs_otp" : "partial") : a.status === "COMPLETED" ? "ok" : "error";
+        if (res.registration_status && !it.facts.some((f) => f.key === "status")) it.facts.unshift({ key: "status", value: String(res.registration_status) });
+      } else if (v) {
+        const res = v.result ?? {};
+        const verified = verifiedFactsOf(res);
+        const blocked = (res.blocked_by as string) ?? null;
+        it.agent = { status: v.status, blocked_by: blocked, registration_status: null, cost_usd: Number(v.cost_usd ?? 0), kind: "verify", mode: v.mode ?? null, verified, run_id: v.run_id ?? null };
+        const add = (key: KeyFact["key"], val: unknown) => {
+          if (meaningful(val) && !it.facts.some((f) => f.key === key)) it.facts.push({ key, value: String(val).trim().slice(0, 240) });
+        };
+        add("benefit", res.benefit);
+        add("deadline", res.deadline);
+        add("helpline", res.helpline);
+        // a live Agent that actually read the official page upgrades a partial / failed Fetch section
+        if (v.status === "COMPLETED" && (!blocked || blocked === "none") && verified.length && (it.status === "partial" || it.status === "error")) it.status = "ok";
+        if (res.official_url && typeof res.official_url === "string" && /^https?:\/\//.test(res.official_url) && !it.sources.includes(res.official_url)) it.sources.push(res.official_url);
+      }
     }
   }
   return copy;

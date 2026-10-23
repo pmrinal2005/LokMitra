@@ -873,6 +873,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .rv-facts dd { margin: 0; color: var(--pearl); word-break: break-word; }
 .rv-why, .rv-diy { margin: 0; font-size: 12px; color: var(--fog); }
 .rv-why span, .rv-diy span { color: var(--pearl); font-weight: 600; }
+.rv-verified { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 12px; color: var(--fog); }
+.rv-verified li { display: flex; gap: 6px; align-items: baseline; }
+.rv-verified b { color: var(--pearl); font-weight: 600; }
+.report-view.print .rv-verified b { color: #111; }
 .rv-fc { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; font-size: 11px; }
 .rv-fc-h { color: var(--fog); font-family: var(--font-mono); }
 .fc { padding: 2px 7px; border-radius: 8px; font-family: var(--font-mono); font-size: 10.5px; border: 1px solid; }
@@ -1216,3 +1220,11 @@ html[data-theme="light"] .logomark .track { stroke: rgba(8,149,122,.3); }
 html[data-theme="light"] .logomark .fish path { stroke: var(--teal); filter: none !important; }
 .theme-toggle svg { transition: transform .5s var(--water); }
 .theme-toggle:hover svg { transform: rotate(20deg); }
+
+/* live "verify" agent — facts the agent saw on the official portal */
+.agent-verified { display: grid; gap: 4px; margin-top: 4px; }
+.agent-verified ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 12.5px; }
+.agent-verified li { display: flex; gap: 6px; align-items: baseline; }
+.agent-verified b { font-weight: 600; }
+.agent-kind { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--hair-strong); color: var(--fog); font-family: var(--font-mono); }
+.agent-kind.verify { color: var(--saffron); border-color: var(--saffron); }

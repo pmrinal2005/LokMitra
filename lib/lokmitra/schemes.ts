@@ -114,6 +114,40 @@ export const LAND_SCHEMA = {
   required: ["found", "blocked_by"],
 } as const;
 
+/** Guaranteed live "verify" Agent — reads the official page (page mode) or maps the gated checker (map mode). */
+export const VERIFY_SCHEMA = {
+  type: "object",
+  properties: {
+    blocked_by: { type: "string", enum: ["none", "captcha", "otp", "login", "site_down", "not_found"] },
+    page_title: { type: "string", nullable: true },
+    official_url: { type: "string", nullable: true },
+    verified_facts: {
+      type: "array",
+      maxItems: 10,
+      items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } }, required: ["label", "value"] },
+    },
+    benefit: { type: "string", nullable: true },
+    deadline: { type: "string", nullable: true },
+    latest_notice: { type: "string", nullable: true },
+    helpline: { type: "string", nullable: true },
+    prices: {
+      type: "array",
+      maxItems: 10,
+      items: {
+        type: "object",
+        properties: { market: { type: "string" }, modal_price: { type: "string", nullable: true }, unit: { type: "string", nullable: true }, date: { type: "string", nullable: true } },
+        required: ["market"],
+      },
+    },
+    status_page_url: { type: "string", nullable: true },
+    input_fields: { type: "array", items: { type: "string" }, maxItems: 12 },
+    requires_otp: { type: "boolean", nullable: true },
+    requires_captcha: { type: "boolean", nullable: true },
+    raw_message: { type: "string", nullable: true },
+  },
+  required: ["blocked_by", "verified_facts"],
+} as const;
+
 export const PRICE_SCHEMA = {
   type: "object",
   properties: {

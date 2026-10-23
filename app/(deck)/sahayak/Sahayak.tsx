@@ -21,7 +21,7 @@ function emailPayload(t: { q: string; report?: { report_id: string; summary_loca
 
 interface Lang { code: string; name: string; native: string; speech: string; priority: boolean }
 interface St { code: string; name: string; hindi: string }
-interface Confirm { confirm_id: string; report_id?: string; ready?: boolean; scheme_id: string; scheme_name: string; task: "status" | "land"; entry_url: string; est_steps: number; est_cost_usd: number; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
+interface Confirm { confirm_id: string; report_id?: string; ready?: boolean; scheme_id: string; scheme_name: string; task: "status" | "land" | "verify"; mode?: "page" | "map" | "personal"; sub_task?: string; token?: string; entry_url: string; est_steps: number; est_cost_usd: number; requires_otp: boolean | null; fields: { key: string; label: string; provided: boolean }[]; expires_at: string }
 interface Section { scheme_id: string; scheme_name: string; task: string; status: string; data: Record<string, unknown> | null; sources: string[]; diy: string[]; live?: boolean; portal_state: string; search?: { query: string; results: number; error?: string | null; latency_ms: number }; confirm?: Confirm; benefit?: string }
 interface AgentRun { confirm_id: string; scheme_name: string; stages: string[]; streaming_url: string | null; steps: number; result: Record<string, unknown> | null; running: boolean; error?: string | null; retry_confirm_id?: string | null; needs_otp?: boolean; needs_captcha?: boolean; relay_id?: string | null; cost_usd?: number; step_rate?: number; video_url?: string | null; needs_input?: boolean }
 interface Turn {
@@ -30,6 +30,8 @@ interface Turn {
   stages: string[];
   pages: { url: string; title: string | null; chars: number; latency_ms?: number | null; error: string | null }[];
   sections: Section[];
+  /** guaranteed live "verify" Agents (the Live Agent step is never skipped) */
+  verify: Confirm[];
   report?: { report_id: string; summary_local: string; summary_en: string; language: string; live_calls?: { search: number; fetch_urls: number; fetch_ok: number }; elapsed_ms?: number; follow_up?: boolean; structured?: StructuredReport | null };
   structured?: StructuredReport | null;
   error?: string;
@@ -125,7 +127,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
     const query = (q ?? text).trim();
     if (!query || busy) return;
     const id = `t${Date.now()}`;
-    setTurns((ts) => [...ts, { id, q: query, stages: [], pages: [], sections: [], done: false }]);
+    setTurns((ts) => [...ts, { id, q: query, stages: [], pages: [], sections: [], verify: [], done: false }]);
     setText("");
     setBusy(true);
     const ctrl = new AbortController();
@@ -139,7 +141,8 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
           else if (event === "fetch") patchTurn(id, (t) => ({ ...t, pages: (data.pages as Turn["pages"]) ?? [] }));
           else if (event === "agent_task") {
             const c = data as unknown as Confirm;
-            // personal checks start immediately, in parallel (no consent step). Missing identifiers stay as plain inputs.
+            if (c.task === "verify") patchTurn(id, (t) => ({ ...t, verify: [...t.verify.filter((v) => v.confirm_id !== c.confirm_id), c] }));
+            // every task starts immediately, in parallel (no consent step). Missing identifiers stay as plain inputs.
             if (c.ready) void runConfirm(c, c.report_id);
           } else if (event === "section") patchTurn(id, (t) => ({ ...t, sections: [...t.sections.filter((s) => !(s.scheme_id === data.scheme_id && s.task === data.task)), data as unknown as Section] }));
           else if (event === "structured") patchTurn(id, (t) => ({ ...t, structured: data as unknown as StructuredReport }));
@@ -162,7 +165,7 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
     setRuns((r) => ({ ...r, [key]: { confirm_id: key, scheme_name: c.scheme_name, stages: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], streaming_url: null, steps: 0, result: null, running: true, relay_id: relayId ?? null, step_rate: 0, cost_usd: 0, video_url: null, needs_input: false } }));
     const up = (f: (a: AgentRun) => AgentRun) => setRuns((r) => ({ ...r, [key]: f(r[key]) }));
     try {
-      await ssePost("/api/lokmitra/confirm", { confirm_id: overrideConfirmId ?? key, identifiers: ids[key] ?? {}, report_id: reportId, relay_id: relayId }, ({ event, data }) => {
+      await ssePost("/api/lokmitra/confirm", { confirm_id: overrideConfirmId ?? key, identifiers: ids[key] ?? {}, report_id: reportId, relay_id: relayId, token: overrideConfirmId ? undefined : c.token }, ({ event, data }) => {
         if (event === "stage") up((a) => ({ ...a, step_rate: Number(data.step_rate_usd ?? a.step_rate ?? 0), stages: [...a.stages, String(data.message)] }));
         else if (event === "agent") {
           const type = String(data.type ?? "");
@@ -249,6 +252,17 @@ export function Sahayak({ mode = "citizen" }: { mode?: "citizen" | "csc" }) {
                   Live TinyFish Fetch read {t.pages.filter((p) => !p.error && p.chars > 0).length}/{t.pages.length} official page(s) just now: {t.pages.map((p) => `${hostOf(p.url)}${p.error ? " (failed)" : ` (ok${p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""})`}`).join(" · ")}
                 </div>
               )}
+
+              {t.verify.map((c) => {
+                const run = runs[c.confirm_id];
+                return (
+                  <div key={c.confirm_id} className="gate" style={{ marginTop: 12 }}>
+                    <b><Icon name="bot" /> {c.scheme_name} — live TinyFish agent {c.mode === "map" ? "mapping the status checker" : "reading the official page"}</b>
+                    <span className="note">A real browser agent opened <b>{hostOf(c.entry_url)}</b> for this question. It never submits anything and enters no personal data.</span>
+                    {run ? <AgentPanel run={run} /> : <span className="note">Starting the agent…</span>}
+                  </div>
+                );
+              })}
 
               {t.sections.filter((s) => s.confirm).map((s) => {
                 const c = s.confirm!;
@@ -416,6 +430,12 @@ function AgentPanel({ run, onOtp }: { run: AgentRun; onOtp?: () => void }) {
       <div className="stage-list" style={{ maxHeight: 140, overflow: "auto" }}>{run.stages.map((s, i) => <span key={i}>{s}</span>)}</div>
       {run.result && (
         <div className="section-card">
+          {Array.isArray(r.verified_facts) && (r.verified_facts as { label?: string; value?: string }[]).filter((f) => f?.label && f?.value).slice(0, 8).map((f, n) => (
+            <div key={`vf${n}`} className="pf-field"><span className="k">{f.label}</span><b>{f.value}</b></div>
+          ))}
+          {["page_title", "benefit", "deadline", "latest_notice", "helpline", "status_page_url"].filter((k) => typeof r[k] === "string" && r[k]).map((k) => (
+            <div key={k} className="pf-field"><span className="k">{k.replace(/_/g, " ")}</span><b>{String(r[k])}</b></div>
+          ))}
           {["found", "blocked_by", "registration_status", "ekyc_status", "land_seeding", "aadhaar_bank_linked", "khasra_or_survey_no", "area", "land_type", "encumbrance_or_remarks", "raw_message"].filter((k) => r[k] !== undefined && r[k] !== null && r[k] !== "").map((k) => (
             <div key={k} className="pf-field"><span className="k">{k.replace(/_/g, " ")}</span><b>{String(r[k])}</b></div>
           ))}

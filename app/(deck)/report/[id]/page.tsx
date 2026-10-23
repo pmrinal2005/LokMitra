@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Citizen Benefit Report — LokMitra", robots: { index: false } };
 
 interface Sec { scheme_id: string; scheme_name: string; task: string; status: string; sources?: string[]; diy?: string[] }
-interface AgentRes { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; at?: string }
+interface AgentRes { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; at?: string; kind?: string; mode?: string }
 
 /**
  * Printable CSC slip (P5 polish):
@@ -110,14 +110,15 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
               <thead><tr><th>Scheme</th><th>Task</th><th>Status</th><th>{L("diy", viewLang)}</th></tr></thead>
               <tbody>
                 {sections.map((s) => {
-                  const a = agent.filter((x) => x.scheme_id === s.scheme_id && x.task === s.task).pop();
+                  const mine = agent.filter((x) => x.scheme_id === s.scheme_id && x.task === s.task);
+                  const a = mine.filter((x) => x.kind !== "verify").pop() ?? mine.filter((x) => x.kind === "verify").pop();
                   const res = a?.result ?? null;
                   return (
                     <tr key={`${s.scheme_id}:${s.task}`}>
                       <td><b>{s.scheme_name}</b></td>
                       <td>{s.task}</td>
                       <td>
-                        {a ? `${a.status}${res?.registration_status ? ` · ${String(res.registration_status)}` : ""}${res?.blocked_by && res.blocked_by !== "none" ? ` · blocked: ${String(res.blocked_by)}` : ""}` : s.status.replace(/_/g, " ")}
+                        {a ? `${a.kind === "verify" ? "live agent verified · " : ""}${a.status}${res?.registration_status ? ` · ${String(res.registration_status)}` : ""}${res?.blocked_by && res.blocked_by !== "none" ? ` · blocked: ${String(res.blocked_by)}` : ""}` : s.status.replace(/_/g, " ")}
                       </td>
                       <td>{(s.diy ?? []).slice(0, 3).join(" → ")}</td>
                     </tr>

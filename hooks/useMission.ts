@@ -357,7 +357,7 @@ export function useMission() {
           if (e.ok) bus.emit("spark", { count: Math.min(e.ok, 5) });
           break;
         case "task":
-          push(mk("◆", "action", `agent » ${e.scheme} on ${e.host}: ${e.auto ? "started automatically" : "waiting for required input"}`, e));
+          push(mk("◆", "action", `agent » ${e.kind === "verify" ? "live verify agent spawned · " : ""}${e.scheme} on ${e.host}: ${e.auto ? "started automatically" : "waiting for required input"}`, e));
           break;
         case "agent": {
           const id = e.run_id ? e.run_id : `j-agent-${e.scheme}`;

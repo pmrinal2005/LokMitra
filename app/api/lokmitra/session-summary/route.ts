@@ -1,7 +1,7 @@
 import { sanitizeUserId } from "@/lib/lokmitra/auth";
 import { db, safe, type Row } from "@/lib/lokmitra/db";
 import { json } from "@/lib/lokmitra/http";
-import { overlayAgentResults, type StructuredReport } from "@/lib/lokmitra/report-shape";
+import { overlayAgentResults, type OverlayAgentResult, type StructuredReport } from "@/lib/lokmitra/report-shape";
 import { hostOf } from "@/lib/lokmitra/util";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ function summarize(rows: Row[], uid: string) {
     languages.add(String(r.language ?? "en"));
     const lc = (r.live_calls ?? {}) as Record<string, number>;
     liveCalls = { search: liveCalls.search + (lc.search ?? 0), fetch_urls: liveCalls.fetch_urls + (lc.fetch_urls ?? 0), fetch_ok: liveCalls.fetch_ok + (lc.fetch_ok ?? 0) };
-    const agentResults = (Array.isArray(r.agent_results) ? r.agent_results : []) as { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; cost_usd?: number }[];
+    const agentResults = (Array.isArray(r.agent_results) ? r.agent_results : []) as OverlayAgentResult[];
     agentChecks += agentResults.length;
     const structured = r.structured ? overlayAgentResults(r.structured as StructuredReport, agentResults) : null;
 

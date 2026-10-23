@@ -6,6 +6,7 @@ import { fmtUsd } from "@/lib/client";
 import { langByCode } from "@/lib/lokmitra/languages";
 import { mdToHtml } from "@/lib/md";
 import { ReportView } from "./ReportView";
+import { meaningful, overlayAgentResults, verifiedFactsOf } from "@/lib/lokmitra/report-shape";
 import type { IconName } from "./Icon";
 import { RelayPanel } from "./RelayPanel";
 import type { UiKey } from "@/lib/i18n/ui-strings";
@@ -31,7 +32,9 @@ const IDLE_COLLAPSE_MS = 120_000;
  *  track   : 6-stage progress rail (question → understanding → portal search → page read → live agent → report)
  *  chip    : localised status chip (ready / working / waiting for you / done / problem)
  *  bubble  : chat bubbles — the question, a live "what I'm doing now" bubble, then the structured report
- *  agents  : Agent = auto / live — personal checks start by themselves, in parallel; each card streams steps, live cost,
+ *  agents  : Agent = auto / live — the Live Agent stage is never skipped: every question spawns at least one real
+ *            TinyFish "verify" Agent (reads the official page / maps the gated checker) plus any personal checks,
+ *            all in parallel; each card streams steps, live cost,
  *            the live browser and the run recording. Missing identifiers are plain operational inputs (no consent gate).
  *  OTP     : OTP relay panel (citizen logs in with own OTP → Browser Context Profile → agent re-runs)
  *  TTS     : read the answer aloud in the citizen's language (browser SpeechSynthesis, $0)
@@ -164,6 +167,23 @@ export function SahayakJourney() {
     stopRef.current = speak(showEn ? r.summary_en : r.summary_local || r.summary_en, showEn ? "en" : r.language, { onEnd: () => setSpeaking(false) });
   };
 
+  /* live: completed Agent runs enrich the structured report the moment they finish */
+  const liveStructured = useMemo(() => {
+    const st = s.report?.structured;
+    if (!st) return null;
+    const ar = s.tasks
+      .map((c) => ({ c, a: s.agents[c.confirm_id] }))
+      .filter((x) => x.a && !x.a.running && x.a.result)
+      .map(({ c, a }) => ({ scheme_id: c.scheme_id, task: c.task === "verify" ? c.sub_task : c.task, status: a!.status ?? "", result: a!.result, cost_usd: a!.cost_usd, kind: c.task === "verify" ? "verify" : "personal", mode: c.mode, run_id: a!.run_id }));
+    return ar.length ? overlayAgentResults(st, ar) : st;
+  }, [s.report, s.tasks, s.agents]);
+
+  /* live-agent totals for the report bar */
+  const agentTotals = useMemo(() => {
+    const runs = Object.values(s.agents);
+    return { n: runs.length, ok: runs.filter((a) => !a.running && a.status === "COMPLETED").length, steps: runs.reduce((x, a) => x + (a.steps || 0), 0), cost: runs.reduce((x, a) => x + (a.cost_usd || 0), 0) };
+  }, [s.agents]);
+
   const chip = useMemo(() => {
     const map = { idle: ["chip_idle", ""], working: ["chip_working", "live"], waiting: ["chip_waiting", "miss"], done: ["chip_done", "hit"], error: ["chip_error", "err"] } as const;
     const [k, cls] = map[s.phase];
@@ -173,7 +193,7 @@ export function SahayakJourney() {
   const liveLine = useMemo(() => {
     if (s.phase === "error") return s.error ?? t("error_generic");
     const running = Object.values(s.agents).find((a) => a.running);
-    if (running) return t("agent_running", { host: running.host });
+    if (running) return running.kind === "verify" ? `${t(running.mode === "map" ? "verify_map" : "verify_page")} · ${running.host}` : t("agent_running", { host: running.host });
     if (j.activeStage) return `${t(STAGE_KEY[j.activeStage])}…`;
     return s.messages[s.messages.length - 1] ?? "";
   }, [s, j.activeStage, t]);
@@ -337,10 +357,13 @@ export function SahayakJourney() {
                     {s.report.live_calls && (
                       <span className="note">● {s.report.live_calls.search} Search · {s.report.live_calls.fetch_ok}/{s.report.live_calls.fetch_urls} Fetch{s.report.elapsed_ms ? ` · ${(s.report.elapsed_ms / 1000).toFixed(1)}s` : ""}</span>
                     )}
+                    {agentTotals.n > 0 && (
+                      <span className="note"><Icon name="bot" /> {agentTotals.ok}/{agentTotals.n} live agent{agentTotals.n > 1 ? "s" : ""} · {agentTotals.steps} {t("steps")}{agentTotals.cost ? ` · ${fmtUsd(agentTotals.cost)}` : ""}</span>
+                    )}
                     {s.finishedAt && <span className="note">{relTime(new Date(s.finishedAt).toISOString(), lang)}</span>}
                   </div>
                   {s.report.structured && !s.report.follow_up ? (
-                    <ReportView r={s.report.structured} lang={s.report.language} showEnglish={showEn} />
+                    <ReportView r={liveStructured ?? s.report.structured} lang={s.report.language} showEnglish={showEn} />
                   ) : (
                     <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(showEn ? s.report.summary_en : s.report.summary_local) }} />
                   )}
@@ -426,11 +449,13 @@ function AgentTaskCard({ c, run, t, values, onChange, onSubmit, onOtp, otpOpen }
   return (
     <div className={`bubble bot agent ${run.running ? "live" : ok ? "ok" : "warn"}`}>
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <b><Icon name="bot" /> {run.running ? t("agent_running", { host: run.host }) : ok ? t("agent_done") : run.needs_otp ? t("agent_blocked_otp") : t("agent_failed")}</b>
+        <b><Icon name="bot" /> {run.kind === "verify" ? (run.running ? t(c.mode === "map" ? "verify_map" : "verify_page") : ok ? t("verify_done") : t("agent_failed")) : run.running ? t("agent_running", { host: run.host }) : ok ? t("agent_done") : run.needs_otp ? t("agent_blocked_otp") : t("agent_failed")}</b>
         <span className="note mono" title={t("task_cost", { cost: fmtUsd(run.cost_usd), steps: run.steps })}>{run.steps} {t("steps")}{run.cost_usd ? ` · ${fmtUsd(run.cost_usd)}` : ""}</span>
       </div>
       <div className="row" style={{ gap: 8 }}>
         <b>{c.scheme_name}</b>
+        <span className={`agent-kind ${run.kind === "verify" ? "verify" : ""}`}>{run.kind === "verify" ? t("verify_badge") : c.task}</span>
+        <span className="note mono">{run.host}{run.run_id ? ` · run ${run.run_id.slice(0, 8)}` : ""}</span>
         {run.streaming_url && run.running && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ {t("watch_live")}</a>}
         {run.video_url && !run.running && <a className="btn sm" href={run.video_url} target="_blank" rel="noreferrer noopener">▶ {t("video_rec")}</a>}
       </div>
@@ -441,11 +466,33 @@ function AgentTaskCard({ c, run, t, values, onChange, onSubmit, onOtp, otpOpen }
           <ol className="agent-log">{run.log.map((l, i) => <li key={i}>{l}</li>)}</ol>
         </details>
       )}
-      {!run.running && reg && <p><b>{c.scheme_name}:</b> {reg}</p>}
+      {!run.running && reg && run.kind !== "verify" && <p><b>{c.scheme_name}:</b> {reg}</p>}
+      {!run.running && run.kind === "verify" && <VerifiedFacts res={res} label={t("verify_facts")} />}
       {!run.running && run.error && <p className="note err"><Icon name="alert" /> {run.error}</p>}
       {!run.running && (run.needs_otp || run.needs_captcha) && !otpOpen && (
         <button className="btn sm paid" onClick={onOtp}><Icon name="phone" /> {t("otp_start")}</button>
       )}
+    </div>
+  );
+}
+
+/** Facts the live "verify" Agent actually saw on the official portal (page read or status-checker map). */
+function VerifiedFacts({ res, label }: { res: Record<string, unknown>; label: string }) {
+  const facts = verifiedFactsOf(res);
+  const prices = (Array.isArray(res.prices) ? (res.prices as Record<string, unknown>[]) : []).filter((p) => typeof p?.market === "string");
+  const fields = (Array.isArray(res.input_fields) ? (res.input_fields as unknown[]) : []).map((x) => (typeof x === "string" ? x : x && typeof x === "object" && typeof (x as { label?: unknown }).label === "string" ? String((x as { label: string }).label) : null)).filter((x): x is string => !!x);
+  const extra: [string, unknown][] = [["Benefit", res.benefit], ["Deadline", res.deadline], ["Latest notice", res.latest_notice], ["Helpline", res.helpline], ["Status page", res.status_page_url]];
+  const shownExtra = extra.filter(([k, v]) => meaningful(v) && !facts.some((f) => f.label.toLowerCase().includes(k.toLowerCase().split(" ")[0])));
+  if (!facts.length && !prices.length && !fields.length && !shownExtra.length) return res.raw_message ? <p className="note">{String(res.raw_message)}</p> : null;
+  return (
+    <div className="agent-verified">
+      <span className="label">{label}{typeof res.page_title === "string" && res.page_title ? ` · ${res.page_title}` : ""}</span>
+      <ul>
+        {facts.map((f, i) => <li key={`f${i}`}><Icon name="check" size={11} /> <span><b>{f.label}:</b> {f.value}</span></li>)}
+        {shownExtra.map(([k, v]) => <li key={k}><Icon name="check" size={11} /> <span><b>{k}:</b> {String(v)}</span></li>)}
+        {prices.slice(0, 5).map((p, i) => <li key={`p${i}`}><Icon name="check" size={11} /> <span><b>{String(p.market)}:</b> {String(p.modal_price ?? "—")} {p.unit ? String(p.unit) : ""} {p.date ? `(${String(p.date)})` : ""}</span></li>)}
+        {fields.length > 0 && <li><Icon name="check" size={11} /> <span><b>Fields:</b> {fields.join(", ")}{res.requires_otp ? " · OTP" : ""}{res.requires_captcha ? " · CAPTCHA" : ""}</span></li>}
+      </ul>
     </div>
   );
 }

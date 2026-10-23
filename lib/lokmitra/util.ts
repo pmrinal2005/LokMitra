@@ -53,6 +53,10 @@ const g = globalThis as unknown as { __lmKey?: Buffer };
 function key(): Buffer {
   const secret = process.env.SESSION_SECRET?.trim() || cfg.adminToken() || cfg.cronSecret();
   if (secret) return createHash("sha256").update(`lokmitra:${secret}`).digest();
+  // no explicit secret: derive from the (server-only) TinyFish key so every serverless instance shares one key —
+  // sealed task tokens from /ask then still open on a different /confirm instance
+  const tf = process.env.TINYFISH_API_KEY?.trim();
+  if (tf) return createHash("sha256").update(`lokmitra:seal:${tf}`).digest();
   return (g.__lmKey ??= randomBytes(32));
 }
 export function seal(obj: unknown): string {

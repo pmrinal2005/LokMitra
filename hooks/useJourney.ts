@@ -6,6 +6,8 @@
  *
  *  - ask(text)            POST /api/lokmitra/ask (SSE): stage · intent · search · fetch · section · agent_task · structured · report
  *  - Agent = auto / live  every `agent_task` starts a live TinyFish Agent immediately (parallel, no consent modal / gate).
+ *                         The Live Agent stage is NEVER skipped: every question gets at least one guaranteed "verify"
+ *                         Agent (reads the official page / maps the gated checker live) besides any personal checks.
  *                         If a required identifier is missing the task shows a purely operational input and starts the
  *                         moment it is submitted (submitFields).
  *  - live streaming       POST /api/lokmitra/confirm (SSE): stage · agent(STARTED/STREAMING_URL/PROGRESS) · result →
@@ -32,7 +34,10 @@ export interface AgentTask {
   started: boolean;
   scheme_id: string;
   scheme_name: string;
-  task: "status" | "land";
+  task: "status" | "land" | "verify";
+  mode: "page" | "map" | "personal";
+  sub_task: string;
+  token: string | null; // sealed task session (stateless restore on another serverless instance)
   entry_url: string;
   host: string;
   est_steps: number;
@@ -44,6 +49,8 @@ export interface AgentTask {
 export interface AgentRun {
   confirm_id: string;
   scheme_name: string;
+  kind: "verify" | "personal";
+  mode: "page" | "map" | "personal";
   host: string;
   running: boolean;
   run_id: string | null;
@@ -120,7 +127,9 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
     const idx = STAGES.indexOf(id);
     const st = { ...x.stages };
     STAGES.slice(0, idx).forEach((k) => {
-      if (st[k] === "active" || st[k] === "todo") st[k] = k === "agent" ? "skipped" : "done";
+      // the live Agent stage is owned by settle() (derived from real runs) — it is never auto-finished or skipped here
+      if (k === "agent") return;
+      if (st[k] === "active" || st[k] === "todo") st[k] = "done";
     });
     return { ...x, stages: st };
   };
@@ -132,10 +141,12 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
     const otp = !!x.otpFor;
     const st = { ...x.stages };
     const runs = Object.values(x.agents);
-    if (runs.length) st.agent = running ? "active" : otp || waitingInput ? "waiting" : runs.some((a) => a.error && !a.result) ? "error" : "done";
+    const anyOk = runs.some((a) => !a.running && a.status === "COMPLETED");
+    if (runs.length) st.agent = running ? "active" : otp || waitingInput ? "waiting" : anyOk ? "done" : runs.some((a) => a.error || (a.status && a.status !== "COMPLETED")) ? "error" : "done";
     else if (waitingInput) st.agent = "waiting";
     else if (x.tasks.length) st.agent = "active";
-    else st.agent = st.agent === "todo" ? "skipped" : st.agent;
+    // no agent task reached the browser → that's a failure, never a silent skip
+    else if (x.report || x.error) st.agent = st.agent === "todo" || st.agent === "active" ? "error" : st.agent;
     if (x.report) st.report = "done";
     const phase: JourneyState["phase"] = x.error && !x.report ? "error" : running ? "working" : waitingInput || otp ? "waiting" : x.report ? "done" : x.phase;
     return { ...x, stages: st, phase, finishedAt: phase === "done" ? x.finishedAt ?? Date.now() : x.finishedAt };
@@ -165,7 +176,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 let y = { ...x, messages: [...x.messages, msg].slice(-12) };
                 if (st === "search") y = stage(finishStagesBefore(y, "search"), "search", "active");
                 else if (st === "fetch") y = stage(finishStagesBefore(y, "fetch"), "fetch", "active");
-                else if (st === "agent") y = stage(finishStagesBefore(y, "agent"), "agent", "active");
+                else if (st === "agent") y = stage(y, "agent", y.stages.agent === "done" ? "done" : "active");
                 else if (st === "synthesis" || st === "translate") y = stage(finishStagesBefore(y, "report"), "report", "active");
                 return y;
               });
@@ -188,7 +199,10 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 started: false,
                 scheme_id: String(data.scheme_id),
                 scheme_name: String(data.scheme_name),
-                task: data.task === "land" ? "land" : "status",
+                task: data.task === "land" ? "land" : data.task === "verify" ? "verify" : "status",
+                mode: data.mode === "page" || data.mode === "map" ? (data.mode as "page" | "map") : "personal",
+                sub_task: String(data.sub_task ?? data.task ?? "info"),
+                token: typeof data.token === "string" ? data.token : null,
                 entry_url: String(data.entry_url),
                 host: hostOf(String(data.entry_url)),
                 est_steps: Number(data.est_steps ?? 0),
@@ -196,7 +210,7 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
                 requires_otp: (data.requires_otp as boolean | null) ?? null,
                 fields,
               };
-              bus.emit("journey", { type: "task", scheme: c.scheme_name, host: c.host, auto: ready });
+              bus.emit("journey", { type: "task", scheme: c.scheme_name, host: c.host, auto: ready, kind: c.task === "verify" ? "verify" : "personal" });
               patch((x) => settle(stage({ ...x, tasks: [...x.tasks.filter((y) => y.confirm_id !== c.confirm_id), c] }, "agent", ready ? "active" : "waiting")));
               // Agent = auto / live: start immediately, in parallel with the rest of the pipeline
               if (ready) startTask(c, {});
@@ -235,14 +249,14 @@ export function useJourney(opts: { lang: string; stateCode?: string; district?: 
       const key = c.confirm_id;
       const ctrl = new AbortController();
       agentAbort.current[key] = ctrl;
-      const base: AgentRun = { confirm_id: key, scheme_name: c.scheme_name, host: c.host, running: true, run_id: null, streaming_url: null, steps: 0, step_rate: 0, video_url: null, log: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], status: null, result: null, cost_usd: 0, error: null, needs_otp: false, needs_captcha: false, retry_confirm_id: null, relay_id: relayId ?? null };
+      const base: AgentRun = { confirm_id: key, scheme_name: c.scheme_name, kind: c.task === "verify" ? "verify" : "personal", mode: c.mode, host: c.host, running: true, run_id: null, streaming_url: null, steps: 0, step_rate: 0, video_url: null, log: relayId ? ["Re-running with your saved login (Browser Context Profile)…"] : [], status: null, result: null, cost_usd: 0, error: null, needs_otp: false, needs_captcha: false, retry_confirm_id: null, relay_id: relayId ?? null };
       patch((x) => settle(stage({ ...x, tasks: x.tasks.map((y) => (y.confirm_id === key ? { ...y, started: true, needs_input: false } : y)), agents: { ...x.agents, [key]: base }, otpFor: x.otpFor === key ? null : x.otpFor }, "agent", "active")));
       bus.emit("journey", { type: "agent", phase: "start", scheme: c.scheme_name, host: c.host });
       const up = (f: (a: AgentRun) => AgentRun) => patch((x) => (x.agents[key] ? { ...x, agents: { ...x.agents, [key]: f(x.agents[key]) } } : x));
       try {
         await ssePost(
           "/api/lokmitra/confirm",
-          { confirm_id: overrideConfirmId ?? key, identifiers, report_id: c.report_id ?? undefined, relay_id: relayId },
+          { confirm_id: overrideConfirmId ?? key, identifiers, report_id: c.report_id ?? undefined, relay_id: relayId, token: overrideConfirmId ? undefined : c.token ?? undefined },
           ({ event, data }) => {
             if (event === "stage") up((a) => ({ ...a, step_rate: Number(data.step_rate_usd ?? a.step_rate), log: [...a.log, String(data.message)].slice(-30) }));
             else if (event === "agent") {

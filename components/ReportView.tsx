@@ -72,7 +72,15 @@ export function ReportView({ r, lang, showEnglish = false, tone = "dark" }: { r:
                       {it.agent.registration_status ? ` · ${it.agent.registration_status}` : ""}
                       {it.agent.blocked_by && it.agent.blocked_by !== "none" ? ` · blocked by ${it.agent.blocked_by}` : ""}
                       {typeof it.agent.cost_usd === "number" ? ` · $${it.agent.cost_usd.toFixed(3)}` : ""}
+                      {it.agent.kind === "verify" ? ` · live ${it.agent.mode === "map" ? "portal map" : "page read"}` : ""}
                     </p>
+                  )}
+                  {it.agent?.kind === "verify" && (it.agent.verified?.length ?? 0) > 0 && (
+                    <ul className="rv-verified" aria-label="Verified live by TinyFish Agent">
+                      {it.agent.verified!.slice(0, 6).map((f, n) => (
+                        <li key={n}><Icon name="check" size={11} /> <b>{f.label}:</b> {f.value}</li>
+                      ))}
+                    </ul>
                   )}
                   {diy.length > 0 && (it.status !== "ok" || it.verdict === "check") && (
                     <p className="rv-diy">

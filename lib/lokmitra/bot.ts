@@ -192,7 +192,8 @@ async function runAsk(chat: string, userId: string, text: string, lang: string) 
 
   /* Agent = auto / live: every personal check starts by itself, in parallel — no consent prompt.
      Checks that already have their identifiers run right now; the others ask for the missing detail(s) one by one. */
-  const tasks = res.sections.filter((x) => x.confirm).map((x) => x.confirm!);
+  // agent_tasks = personal checks + the guaranteed live "verify" agents (the Live Agent step is never skipped)
+  const tasks = res.agent_tasks?.length ? res.agent_tasks : res.sections.filter((x) => x.confirm).map((x) => x.confirm!);
   const ready = tasks.filter((c) => c.ready);
   const waiting = tasks.filter((c) => !c.ready).map((c) => c.confirm_id);
   const running = Promise.all(ready.map((c) => executeConfirmed(chat, userId, c.confirm_id, {}).catch((e: Error) => tgSend(chat, `${e.message}`))));
@@ -364,7 +365,13 @@ async function executeConfirmed(chat: string, userId: string, confirmId: string,
   }
   if (!final) return tgSend(chat, "The agent did not return a result.");
   const r = (final.result as Record<string, unknown>) ?? {};
-  const lines = [`<b>${final.scheme_name}</b> — ${final.status}`];
+  const lines = [`<b>${final.scheme_name}</b> — ${final.task === "verify" ? "live agent verified · " : ""}${final.status}`];
+  if (final.task === "verify") {
+    const esc = (x: unknown) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const vf = Array.isArray(r.verified_facts) ? (r.verified_facts as { label?: string; value?: string }[]) : [];
+    vf.filter((f) => f?.label && f?.value).slice(0, 8).forEach((f) => lines.push(`• ${esc(f.label)}: ${esc(f.value)}`));
+    for (const k of ["benefit", "deadline", "latest_notice", "helpline", "status_page_url"]) if (typeof r[k] === "string" && r[k]) lines.push(`• ${k.replace(/_/g, " ")}: ${esc(r[k])}`);
+  }
   for (const k of ["registration_status", "ekyc_status", "land_seeding", "aadhaar_bank_linked", "khasra_or_survey_no", "area", "land_type", "raw_message"]) if (r[k]) lines.push(`• ${k.replace(/_/g, " ")}: ${String(r[k]).replace(/</g, "&lt;")}`);
   const inst = Array.isArray(r.installments) ? (r.installments as Record<string, string>[]) : [];
   inst.slice(0, 8).forEach((i) => lines.push(`• ${i.label}: ${i.amount ?? ""} ${i.date ?? ""} ${i.status ?? ""}`));

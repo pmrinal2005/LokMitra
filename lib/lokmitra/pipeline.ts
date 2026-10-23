@@ -47,8 +47,15 @@ export interface ConfirmPlan {
   ready: boolean;
   scheme_id: string;
   scheme_name: string;
-  task: "status" | "land";
+  task: "status" | "land" | "verify";
+  /** verify agents: page = read the official page live · map = map the gated status checker live; personal = status/land */
+  mode: "page" | "map" | "personal";
+  /** section task the agent backs (info / price / deadline / status / land) — used to overlay results onto the report */
+  sub_task: string;
+  /** sealed task session — lets /confirm restore the task on a different serverless instance (memory store) */
+  token: string;
   entry_url: string;
+  fallback_url?: string | null;
   est_steps: number;
   est_cost_usd: number;
   requires_otp: boolean | null;
@@ -65,6 +72,8 @@ export interface AskResult {
   summary_en: string;
   summary_local: string;
   structured?: StructuredReport | null;
+  /** every live Agent task of this question: guaranteed "verify" agents + personal status / land checks */
+  agent_tasks: ConfirmPlan[];
   sources: string[];
   live_calls: { search: number; fetch_urls: number; fetch_ok: number };
   cost_usd: number;
@@ -183,11 +192,74 @@ async function planAgentTask(scheme: SchemeDef, sub: SubQuery, intent: Intent, p
     scheme_id: scheme.id,
     scheme_name: scheme.name,
     task,
+    mode: "personal",
+    sub_task: task,
+    token: seal(sess),
     entry_url: entry,
     est_steps: steps,
     est_cost_usd: Math.round(steps * r.step * 1000) / 1000,
     requires_otp: scheme.statusIdentifiers?.some((f) => /otp/i.test(f.label)) || null,
     fields,
+    expires_at: sess.expires_at,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Guaranteed live "verify" Agent (the journey's Live Agent step)      */
+/* ------------------------------------------------------------------ */
+/** At most this many verify agents per question (they run in parallel). */
+const MAX_VERIFY = 3;
+const isHttp = (u: string | null | undefined): u is string => !!u && /^https?:\/\//i.test(u);
+
+/**
+ * Plans one live TinyFish Agent that ALWAYS runs for a question — it is never skipped:
+ *  page : open the official page in a real browser and read the facts the citizen asked about (no form submission)
+ *  map  : open the gated status checker and map its inputs / OTP / CAPTCHA (no personal data entered)
+ * It needs no identifiers, so it is `ready` and every channel starts it immediately.
+ */
+async function planVerifyTask(o: { scheme: SchemeDef; subTask: string; mode: "page" | "map"; entry: string; fallback: string | null; intent: Intent; question: string; portalState: string; userId: string | null; reportId: string }): Promise<ConfirmPlan> {
+  const steps = estimateSteps("info");
+  const r = await rates();
+  const ttl = Math.max(cfg.confirmTtlSec(), 900);
+  const fallback = isHttp(o.fallback) && o.fallback !== o.entry ? o.fallback : null;
+  const sess = await sessions.put(
+    "confirm",
+    {
+      scheme_id: o.scheme.id,
+      task: "verify",
+      mode: o.mode,
+      sub_task: o.subTask,
+      state_code: o.portalState,
+      entry_url: o.entry,
+      fallback_url: fallback,
+      question: clip(redact(o.question), 300),
+      commodity: o.intent.commodity ?? null,
+      district: o.intent.district ?? null,
+      est_steps: steps,
+      sealed: seal({}),
+      language: o.intent.language,
+      report_id: o.reportId,
+      created: nowIso(),
+    },
+    ttl,
+    { user_id: o.userId },
+  );
+  return {
+    confirm_id: sess.id,
+    report_id: o.reportId,
+    ready: true,
+    scheme_id: o.scheme.id,
+    scheme_name: o.scheme.name,
+    task: "verify",
+    mode: o.mode,
+    sub_task: o.subTask,
+    token: seal(sess),
+    entry_url: o.entry,
+    fallback_url: fallback,
+    est_steps: steps,
+    est_cost_usd: Math.round(steps * r.step * 1000) / 1000,
+    requires_otp: null,
+    fields: [],
     expires_at: sess.expires_at,
   };
 }
@@ -220,13 +292,23 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
 
   /* ---- follow-up questions answered from the previous report ---- */
   if (intent.follow_up) {
-    const chat = await sessions.get<{ summary_en: string }>(`chat_${userId}`.slice(0, 128));
+    const chat = await sessions.get<{ summary_en: string; scheme_ids?: string[]; state_code?: string | null }>(`chat_${userId}`.slice(0, 128));
     if (chat?.data.summary_en) {
       const ans = await followUp(text, chat.data.summary_en, replyLang, qc);
       if (ans) {
         const report_id = uuid();
-        await emit("report", { report_id, summary_en: ans, summary_local: ans, language: replyLang, follow_up: true });
-        return { report_id, language: replyLang, intent, intent_via: via, sections: [], summary_en: ans, summary_local: ans, sources: [], live_calls: { search: 0, fetch_urls: 0, fetch_ok: 0 }, cost_usd: 0, follow_up: true, elapsed_ms: Date.now() - t0 };
+        // the Live Agent step is never skipped — even a follow-up re-reads the official portal live
+        const agent_tasks: ConfirmPlan[] = [];
+        const prev = schemeById(chat.data.scheme_ids?.[0] ?? "") ?? schemeById("myscheme")!;
+        await emit("stage", { stage: "agent", message: `Live TinyFish Agent: re-reading the official ${prev.name} portal for your follow-up…` });
+        const plan = await safe(planVerifyTask({ scheme: prev, subTask: "info", mode: "page", entry: prev.entry, fallback: prev.infoLinks[0] ?? null, intent, question: intent.english_query || text, portalState: chat.data.state_code || intent.state_code || "IN", userId, reportId: report_id }), null);
+        if (plan) {
+          agent_tasks.push(plan);
+          await emit("agent_task", plan as unknown as Record<string, unknown>);
+        }
+        await safe(db.insert("benefit_reports", { id: report_id, user_id: userId, language: replyLang, query: redact(text), intent: {}, sections: [], summary_en: ans, summary_local: ans, sources: [], live_calls: { search: 0, fetch_urls: 0, fetch_ok: 0 }, created_at: nowIso() }), []);
+        await emit("report", { report_id, summary_en: ans, summary_local: ans, language: replyLang, follow_up: true, agent_tasks: agent_tasks.length });
+        return { report_id, language: replyLang, intent, intent_via: via, sections: [], summary_en: ans, summary_local: ans, agent_tasks, sources: [], live_calls: { search: 0, fetch_urls: 0, fetch_ok: 0 }, cost_usd: 0, follow_up: true, elapsed_ms: Date.now() - t0 };
       }
     }
   }
@@ -250,8 +332,38 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     }),
   );
 
-  /* ---- LIVE Fetch of every public page (batched ≤10 URLs per request, batches in parallel) ---- */
   const isGated = (sub: SubQuery) => sub.personal && (sub.task === "status" || sub.task === "land");
+  // the report id is fixed up-front so live Agent tasks (started automatically, in parallel) can attach their results to it
+  const report_id = uuid();
+  const agent_tasks: ConfirmPlan[] = [];
+
+  /* ---- LIVE AGENT — never skipped: every question spawns ≥1 real TinyFish "verify" Agent right now ---- */
+  {
+    const seen = new Set<string>();
+    const picks = [...resolved]
+      .sort((a, b) => Number(isGated(b.sub)) - Number(isGated(a.sub)) || Number(a.scheme.id === "myscheme") - Number(b.scheme.id === "myscheme"))
+      .filter((r) => (seen.has(r.scheme.id) ? false : (seen.add(r.scheme.id), true)))
+      .slice(0, MAX_VERIFY);
+    await emit("stage", { stage: "agent", message: `Live TinyFish Agent: spawning ${picks.length} real browser agent(s) on the official portal(s) now…` });
+    const plans = await Promise.all(
+      picks.map(async (r) => {
+        const gated = isGated(r.sub);
+        // page mode starts on the scheme's official portal (most reliable), falling back to the top live Search hit;
+        // price lookups start on the live market page Search found; map mode starts on the live status checker
+        const top = r.live?.deep_links?.find((l) => !/\.pdf($|\?)/i.test(l.url))?.url ?? null;
+        const entry = gated ? r.live?.entry_url || r.scheme.statusUrl || r.scheme.entry : r.sub.task === "price" ? top ?? r.scheme.entry : r.scheme.entry;
+        const fallback = gated ? r.scheme.entry : r.sub.task === "price" ? r.scheme.entry : top ?? r.scheme.infoLinks[0] ?? null;
+        return safe(planVerifyTask({ scheme: r.scheme, subTask: r.sub.task, mode: gated ? "map" : "page", entry, fallback, intent, question: intent.english_query || text, portalState: r.portalState, userId, reportId: report_id }), null);
+      }),
+    );
+    for (const plan of plans) {
+      if (!plan) continue;
+      agent_tasks.push(plan);
+      await emit("agent_task", plan as unknown as Record<string, unknown>);
+    }
+  }
+
+  /* ---- LIVE Fetch of every public page (batched ≤10 URLs per request, batches in parallel) ---- */
   const publicOnes = resolved.filter((r) => !isGated(r.sub));
   const urlPlan = new Map<string, string[]>();
   for (const r of publicOnes) urlPlan.set(`${r.scheme.id}:${r.sub.task}`, (r.live?.deep_links ?? []).slice(0, 3).map((l) => l.url));
@@ -265,8 +377,6 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
   const byUrl = new Map(pages.map((p) => [p.url, p]));
 
   /* ---- build sections ---- */
-  // the report id is fixed up-front so live Agent tasks (started automatically, in parallel) can attach their results to it
-  const report_id = uuid();
   const sections: Section[] = [];
   const pagesBySection = new Map<string, { url: string; text: string }[]>();
   for (const r of resolved) {
@@ -283,6 +393,7 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
         confirm: plan,
       };
       sections.push(sec);
+      agent_tasks.push(plan);
       await emit("agent_task", plan as unknown as Record<string, unknown>);
       await emit("section", sec as unknown as Record<string, unknown>);
       continue;
@@ -327,11 +438,11 @@ export async function ask(input: AskInput, emit: Emit = () => {}): Promise<AskRe
     }).catch(async () => db.insert("benefit_reports", { id: report_id, user_id: userId, language: replyLang, query: redact(text), intent: {}, sections: [], summary_en, summary_local, sources, live_calls, created_at: nowIso() })),
     [],
   );
-  await safe(sessions.put("chat", { summary_en, report_id }, 3600 * 6, { id: `chat_${userId}`.slice(0, 128), user_id: userId }), null);
+  await safe(sessions.put("chat", { summary_en, report_id, scheme_ids: sections.map((s) => s.scheme_id), state_code: intent.state_code ?? null }, 3600 * 6, { id: `chat_${userId}`.slice(0, 128), user_id: userId }), null);
   void logRun({ surface: "llm", purpose: "report", state_code: intent.state_code, latency_ms: Date.now() - t0, meta: { sections: sections.length, via, lang: replyLang, channel: input.channel ?? "web", live_calls } });
 
-  const result: AskResult = { report_id, language: replyLang, intent, intent_via: via, sections, summary_en, summary_local, structured, sources, live_calls, cost_usd: 0, elapsed_ms: Date.now() - t0 };
-  await emit("report", { report_id, summary_en, summary_local, language: replyLang, sources, live_calls, elapsed_ms: result.elapsed_ms, structured, answer: structured.answer ?? null });
+  const result: AskResult = { report_id, language: replyLang, intent, intent_via: via, sections, summary_en, summary_local, structured, agent_tasks, sources, live_calls, cost_usd: 0, elapsed_ms: Date.now() - t0 };
+  await emit("report", { report_id, summary_en, summary_local, language: replyLang, sources, live_calls, elapsed_ms: result.elapsed_ms, structured, answer: structured.answer ?? null, agent_tasks: agent_tasks.length });
   return result;
 }
 

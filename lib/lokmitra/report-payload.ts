@@ -25,7 +25,7 @@ export interface ReportPayload {
   one_liner: string;
 }
 
-type AgentRes = { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; cost_usd?: number };
+type AgentRes = { scheme_id: string; task: string; status: string; result: Record<string, unknown> | null; cost_usd?: number; kind?: string; mode?: string; run_id?: string | null };
 
 export function structuredOf(r: Record<string, unknown>): StructuredReport | null {
   const s = r.structured as StructuredReport | undefined;

@@ -19,7 +19,7 @@ export type UiKey =
   | "chip_idle" | "chip_working" | "chip_waiting" | "chip_done" | "chip_error"
   | "task_title" | "task_body" | "task_otp_note" | "task_run" | "task_diy" | "task_fields" | "task_cost" | "video_rec"
   | "otp_title" | "otp_body" | "otp_start" | "otp_saved"
-  | "agent_running" | "agent_done" | "agent_failed" | "agent_blocked_otp" | "watch_live" | "steps"
+  | "agent_running" | "agent_done" | "agent_failed" | "agent_blocked_otp" | "watch_live" | "steps" | "verify_page" | "verify_map" | "verify_done" | "verify_facts" | "verify_badge" | "verify_none"
   | "speak" | "speak_stop" | "collapse" | "expand" | "show_report" | "english"
   | "snap_title" | "snap_sub" | "snap_schemes" | "snap_likely" | "snap_deadlines" | "snap_actions" | "snap_empty" | "snap_reports"
   | "src_title" | "src_sub" | "src_official" | "src_other" | "src_empty" | "src_read_live" | "src_seen"
@@ -29,6 +29,7 @@ export type UiKey =
 type Table = Record<UiKey, string>;
 
 const en: Table = {
+  verify_page: "Live agent · reading the official page", verify_map: "Live agent · mapping the status checker", verify_done: "Verified live on the official portal", verify_facts: "Seen by the agent just now", verify_badge: "LIVE AGENT", verify_none: "No live agent was started",
   nav_journey: "Sahayak", nav_network: "Network", nav_logs: "Agent Logs", nav_wallet: "Wallet", nav_sectors: "Sectors",
   journey_title: "Your Sahayak Journey", journey_sub: "Ask once — LokMitra finds the official portal, reads it live and explains it in your language.",
   idle_title: "Namaste How can I help you today?", idle_sub: "Ask about PM-KISAN, Ayushman, scholarships, ration, pension, land records or mandi prices — by voice or text.",
@@ -48,6 +49,7 @@ const en: Table = {
 };
 
 const hi: Table = {
+  verify_page: "लाइव एजेंट · आधिकारिक पेज पढ़ रहा है", verify_map: "लाइव एजेंट · स्थिति जाँच पेज समझ रहा है", verify_done: "आधिकारिक पोर्टल पर लाइव सत्यापित", verify_facts: "एजेंट ने अभी देखा", verify_badge: "लाइव एजेंट", verify_none: "कोई लाइव एजेंट शुरू नहीं हुआ",
   nav_journey: "सहायक", nav_network: "नेटवर्क", nav_logs: "एजेंट लॉग", nav_wallet: "वॉलेट", nav_sectors: "क्षेत्र",
   journey_title: "आपकी सहायक यात्रा", journey_sub: "एक बार पूछें — लोकमित्र आधिकारिक पोर्टल ढूँढकर उसे अभी पढ़ता है और आपकी भाषा में समझाता है।",
   idle_title: "नमस्ते आज मैं आपकी क्या मदद करूँ?", idle_sub: "PM-KISAN, आयुष्मान, छात्रवृत्ति, राशन, पेंशन, भूमि अभिलेख या मंडी भाव के बारे में बोलकर या लिखकर पूछें।",
@@ -67,6 +69,7 @@ const hi: Table = {
 };
 
 const mr: Table = {
+  verify_page: "थेट एजंट · अधिकृत पान वाचत आहे", verify_map: "थेट एजंट · स्थिती तपासणी पान समजून घेत आहे", verify_done: "अधिकृत पोर्टलवर थेट पडताळले", verify_facts: "एजंटने आत्ताच पाहिले", verify_badge: "थेट एजंट", verify_none: "कोणताही थेट एजंट सुरू झाला नाही",
   nav_journey: "सहायक", nav_network: "नेटवर्क", nav_logs: "एजंट लॉग", nav_wallet: "वॉलेट", nav_sectors: "क्षेत्रे",
   journey_title: "तुमचा सहायक प्रवास", journey_sub: "एकदाच विचारा — लोकमित्र अधिकृत पोर्टल शोधून ते आत्ता वाचतो आणि तुमच्या भाषेत समजावतो.",
   idle_title: "नमस्कार आज मी तुम्हाला कशी मदत करू?", idle_sub: "PM-KISAN, आयुष्मान, शिष्यवृत्ती, रेशन, पेन्शन, जमीन अभिलेख किंवा बाजारभाव याबद्दल बोलून किंवा लिहून विचारा.",
@@ -86,6 +89,7 @@ const mr: Table = {
 };
 
 const ta: Table = {
+  verify_page: "நேரடி முகவர் · அதிகாரப்பூர்வ பக்கத்தைப் படிக்கிறது", verify_map: "நேரடி முகவர் · நிலை சரிபார்ப்பு பக்கத்தை வரைபடமாக்குகிறது", verify_done: "அதிகாரப்பூர்வ தளத்தில் நேரடியாக சரிபார்க்கப்பட்டது", verify_facts: "முகவர் இப்போது பார்த்தது", verify_badge: "நேரடி முகவர்", verify_none: "நேரடி முகவர் தொடங்கவில்லை",
   nav_journey: "சகாயக்", nav_network: "வலையமைப்பு", nav_logs: "முகவர் பதிவுகள்", nav_wallet: "வாலெட்", nav_sectors: "துறைகள்",
   journey_title: "உங்கள் சகாயக் பயணம்", journey_sub: "ஒருமுறை கேளுங்கள் — லோக்மித்ரா அதிகாரப்பூர்வ தளத்தைக் கண்டறிந்து இப்போதே படித்து உங்கள் மொழியில் விளக்கும்.",
   idle_title: "வணக்கம் இன்று நான் உங்களுக்கு எப்படி உதவலாம்?", idle_sub: "PM-KISAN, ஆயுஷ்மான், உதவித்தொகை, ரேஷன், ஓய்வூதியம், நில ஆவணங்கள் அல்லது சந்தை விலை பற்றி பேசியோ எழுதியோ கேளுங்கள்.",
@@ -105,6 +109,7 @@ const ta: Table = {
 };
 
 const te: Table = {
+  verify_page: "ప్రత్యక్ష ఏజెంట్ · అధికారిక పేజీ చదువుతోంది", verify_map: "ప్రత్యక్ష ఏజెంట్ · స్థితి తనిఖీ పేజీని మ్యాప్ చేస్తోంది", verify_done: "అధికారిక పోర్టల్‌లో ప్రత్యక్షంగా ధృవీకరించబడింది", verify_facts: "ఏజెంట్ ఇప్పుడే చూసింది", verify_badge: "ప్రత్యక్ష ఏజెంట్", verify_none: "ప్రత్యక్ష ఏజెంట్ ప్రారంభం కాలేదు",
   nav_journey: "సహాయక్", nav_network: "నెట్‌వర్క్", nav_logs: "ఏజెంట్ లాగ్‌లు", nav_wallet: "వాలెట్", nav_sectors: "రంగాలు",
   journey_title: "మీ సహాయక్ ప్రయాణం", journey_sub: "ఒక్కసారి అడగండి — లోక్‌మిత్ర అధికారిక పోర్టల్‌ను కనుగొని ఇప్పుడే చదివి మీ భాషలో వివరిస్తుంది.",
   idle_title: "నమస్తే ఈరోజు నేను మీకు ఎలా సహాయం చేయగలను?", idle_sub: "PM-KISAN, ఆయుష్మాన్, స్కాలర్‌షిప్, రేషన్, పెన్షన్, భూ రికార్డులు లేదా మార్కెట్ ధరల గురించి మాట్లాడి లేదా రాసి అడగండి.",
@@ -124,6 +129,7 @@ const te: Table = {
 };
 
 const bn: Table = {
+  verify_page: "লাইভ এজেন্ট · সরকারি পেজ পড়ছে", verify_map: "লাইভ এজেন্ট · স্ট্যাটাস চেকার ম্যাপ করছে", verify_done: "সরকারি পোর্টালে লাইভ যাচাই করা হয়েছে", verify_facts: "এজেন্ট এইমাত্র দেখেছে", verify_badge: "লাইভ এজেন্ট", verify_none: "কোনো লাইভ এজেন্ট শুরু হয়নি",
   nav_journey: "সহায়ক", nav_network: "নেটওয়ার্ক", nav_logs: "এজেন্ট লগ", nav_wallet: "ওয়ালেট", nav_sectors: "ক্ষেত্র",
   journey_title: "আপনার সহায়ক যাত্রা", journey_sub: "একবার জিজ্ঞাসা করুন — লোকমিত্র সরকারি পোর্টাল খুঁজে এখনই পড়ে আপনার ভাষায় বুঝিয়ে দেয়।",
   idle_title: "নমস্কার আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি?", idle_sub: "PM-KISAN, আয়ুষ্মান, বৃত্তি, রেশন, পেনশন, ভূমি রেকর্ড বা মান্ডি দর সম্পর্কে বলে বা লিখে জিজ্ঞাসা করুন।",
@@ -143,6 +149,7 @@ const bn: Table = {
 };
 
 const gu: Table = {
+  verify_page: "લાઇવ એજન્ટ · સત્તાવાર પેજ વાંચે છે", verify_map: "લાઇવ એજન્ટ · સ્ટેટસ ચેકર સમજે છે", verify_done: "સત્તાવાર પોર્ટલ પર લાઇવ ચકાસાયું", verify_facts: "એજન્ટે હમણાં જોયું", verify_badge: "લાઇવ એજન્ટ", verify_none: "કોઈ લાઇવ એજન્ટ શરૂ થયો નથી",
   nav_journey: "સહાયક", nav_network: "નેટવર્ક", nav_logs: "એજન્ટ લૉગ", nav_wallet: "વૉલેટ", nav_sectors: "ક્ષેત્રો",
   journey_title: "તમારી સહાયક યાત્રા", journey_sub: "એક વાર પૂછો — લોકમિત્ર સત્તાવાર પોર્ટલ શોધી અત્યારે વાંચે છે અને તમારી ભાષામાં સમજાવે છે.",
   idle_title: "નમસ્તે આજે હું તમારી કેવી રીતે મદદ કરું?", idle_sub: "PM-KISAN, આયુષ્માન, શિષ્યવૃત્તિ, રેશન, પેન્શન, જમીન રેકર્ડ અથવા બજાર ભાવ વિશે બોલીને અથવા લખીને પૂછો.",

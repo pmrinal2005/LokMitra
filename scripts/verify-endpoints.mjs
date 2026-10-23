@@ -10,6 +10,7 @@
 const BASE = (process.argv[2] || process.env.DECK_URL || "http://localhost:3000").replace(/\/+$/, "");
 const PAID = process.env.DECK_VERIFY_PAID === "1";
 const results = [];
+let verifyTask = null;
 
 async function check(name, fn) {
   const t0 = Date.now();
@@ -118,7 +119,12 @@ await check("POST /api/lokmitra/ask?stream=1 (live Search + Fetch SSE)", async (
   const txt = await r.text();
   const ev = [...txt.matchAll(/^event: ([a-z_]+)/gm)].map((m) => m[1]);
   need(ev.includes("search") && ev.includes("fetch") && ev.includes("report"), `events: ${[...new Set(ev)].join(",")}`);
-  return [...new Set(ev)].join(",");
+  // the Live Agent step is never skipped: every question must plan ≥1 guaranteed "verify" Agent
+  const tasks = [...txt.matchAll(/^event: agent_task\ndata: (.*)$/gm)].map((m) => JSON.parse(m[1]));
+  const verify = tasks.find((t) => t.task === "verify" && t.ready);
+  need(verify, "no guaranteed live verify agent_task emitted (Live Agent step would be skipped)");
+  verifyTask = verify;
+  return `${[...new Set(ev)].join(",")} · verify agent → ${verify.scheme_id} (${verify.mode})`;
 });
 
 if (PAID) {
@@ -139,6 +145,23 @@ if (PAID) {
     need(seen.has("STARTED"), "no STARTED event");
     return [...seen].join(",");
   });
+  if (verifyTask) {
+    await check("POST /api/lokmitra/confirm (PAID · journey Live Agent)", async () => {
+      const r = await fetch(BASE + "/api/lokmitra/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ confirm_id: verifyTask.confirm_id, report_id: verifyTask.report_id, token: verifyTask.token }),
+      });
+      need(r.ok && r.body, `HTTP ${r.status}`);
+      const txt = await r.text();
+      const res = [...txt.matchAll(/^event: result\ndata: (.*)$/gm)].map((m) => JSON.parse(m[1]))[0];
+      need(res, `no result event (${(txt.match(/^event: error\ndata: (.*)$/m) ?? [])[1] ?? "?"})`);
+      need(res.run_id, "no TinyFish run_id");
+      need(res.status === "COMPLETED", `agent ${res.status}: ${res.error}`);
+      const facts = Array.isArray(res.result?.verified_facts) ? res.result.verified_facts.length : 0;
+      return `run ${String(res.run_id).slice(0, 8)} · ${res.steps} steps · $${Number(res.cost_usd).toFixed(3)} · ${facts} verified facts`;
+    });
+  }
 }
 
 const pad = (s, n) => (s + " ".repeat(n)).slice(0, n);
