@@ -4,6 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n/client";
 import { ThemeToggle } from "./ThemeToggle";
 import { BrandLogo } from "./BrandLogo";
+import { UiModeSwitch } from "./UiModeSwitch";
+import { useUiMode } from "@/hooks/useUiMode";
 import type { UiKey } from "@/lib/i18n/ui-strings";
 
 /** In-page pills. "Wallet" is operator-only and deep-links to Settings → Usage & Infrastructure. */
@@ -29,6 +31,7 @@ export function GlassNav({
   isOperator?: boolean;
 }) {
   const { t } = useT();
+  const { mode } = useUiMode();
   const items = NAV_ITEMS.filter((n) => !n.operatorOnly || isOperator);
   const [hidden, setHidden] = useState(false);
   const [active, setActive] = useState<string>(NAV_ITEMS[0].id);
@@ -69,7 +72,7 @@ export function GlassNav({
     const wrap = pillsRef.current;
     const btn = wrap?.querySelector<HTMLButtonElement>(`[data-id="${active}"]`);
     if (wrap && btn) setDrop({ left: btn.offsetLeft, width: btn.offsetWidth });
-  }, [active, items.length, t]);
+  }, [active, items.length, t, mode]); // re-measure when the pills re-appear after a Casual → Developer switch
 
   const go = (id: string) => {
     const item = NAV_ITEMS.find((n) => n.id === id);
@@ -88,11 +91,12 @@ export function GlassNav({
         <BrandLogo size={38} decorative priority className="brand-logo-nav" />
         <div className="brand-word">
           LokMitra
-          <small>× TinyFish command deck</small>
+          <small className="dev-only">× TinyFish command deck</small>
         </div>
       </a>
 
-      <div className="nav-pills" ref={pillsRef} role="tablist">
+      {/* developer-only section tabs (hidden in Casual mode via html[data-ui-mode]) */}
+      <div className="nav-pills dev-only" ref={pillsRef} role="tablist">
         <span className="nav-droplet" style={{ left: drop.left, width: drop.width }} aria-hidden="true" />
         {items.map((n) => (
           <button key={n.id} data-id={n.id} className={`nav-pill ${n.href ? "nav-pill-ext" : ""}`} aria-current={active === n.id} role="tab" onClick={() => go(n.id)} title={n.href ? "Operator · Settings → Usage & Infrastructure" : undefined}>
@@ -100,6 +104,8 @@ export function GlassNav({
           </button>
         ))}
       </div>
+
+      <UiModeSwitch className="nav-mode-switch" />
 
       <div className="nav-right">
         <ThemeToggle />

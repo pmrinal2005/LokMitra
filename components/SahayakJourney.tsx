@@ -12,6 +12,7 @@ import { RelayPanel } from "./RelayPanel";
 import type { UiKey } from "@/lib/i18n/ui-strings";
 import { Icon } from "./Icon";
 import { SahayakMascot } from "./SahayakMascot";
+import { useUiMode } from "@/hooks/useUiMode";
 
 const STAGE_KEY: Record<StageId, UiKey> = { listen: "st_listen", understand: "st_understand", search: "st_search", fetch: "st_fetch", agent: "st_agent", report: "st_report" };
 const STAGE_ICON: Record<StageId, IconName> = { listen: "mic", understand: "brain", search: "search", fetch: "file", agent: "bot", report: "clipboard" };
@@ -45,9 +46,13 @@ export function SahayakJourney() {
   const { t, lang, setLang, languages } = useT();
   const j = useJourney({ lang });
   const { s } = j;
+  const { isCasual } = useUiMode();
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedState, setCollapsed] = useState(false);
+  // Casual mode has no collapse header → the journey is always shown expanded there (presentation only;
+  // the developer collapse state is kept and restored when switching back).
+  const collapsed = collapsedState && !isCasual;
   const [speaking, setSpeaking] = useState(false);
   const [showEn, setShowEn] = useState(false);
   const [ids, setIds] = useState<Record<string, Record<string, string>>>({});
@@ -65,14 +70,14 @@ export function SahayakJourney() {
     window.addEventListener("pointerdown", touch);
     window.addEventListener("keydown", touch);
     const timer = setInterval(() => {
-      if (s.phase === "done" && !speaking && Date.now() - lastTouch.current > IDLE_COLLAPSE_MS) setCollapsed(true);
+      if (!isCasual && s.phase === "done" && !speaking && Date.now() - lastTouch.current > IDLE_COLLAPSE_MS) setCollapsed(true);
     }, 10_000);
     return () => {
       window.removeEventListener("pointerdown", touch);
       window.removeEventListener("keydown", touch);
       clearInterval(timer);
     };
-  }, [s.phase, speaking]);
+  }, [s.phase, speaking, isCasual]);
 
   /* auto-expand when the journey needs the citizen */
   useEffect(() => {
@@ -198,9 +203,29 @@ export function SahayakJourney() {
     return s.messages[s.messages.length - 1] ?? "";
   }, [s, j.activeStage, t]);
 
+  /* Casual mode: one friendly, non-technical status line instead of stage / host / agent details */
+  const casualLine = s.phase === "error" ? s.error ?? t("error_generic") : s.phase === "waiting" ? t("casual_waiting") : t("casual_working");
+  /* trust cue only when this answer really was read live from portals / verified by a live agent */
+  const checkedLive = !!s.report && ((s.report.live_calls?.fetch_ok ?? 0) > 0 || agentTotals.ok > 0);
+
   return (
     <section id="sahayak-journey" className={`panel journey-panel area-journey ${collapsed ? "is-collapsed" : ""}`} style={{ ["--i" as string]: 0 }} aria-labelledby="journey-title">
-      <header className="panel-head journey-head">
+      {/* ---------- CASUAL HEADER (simplified view) ---------- */}
+      <header className="casual-only casual-hero">
+        <SahayakMascot size={72} mood={s.phase} />
+        <h2 className="casual-title">{t("casual_title")}</h2>
+        <p className="casual-sub">{t("casual_sub")}</p>
+        <label className="casual-lang">
+          <Icon name="globe" />
+          <select className="select" value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t("lang_label")}>
+            {languages.map((l) => (
+              <option key={l.code} value={l.code}>{l.native}</option>
+            ))}
+          </select>
+        </label>
+      </header>
+
+      <header className="panel-head journey-head dev-only">
         <div className="journey-brand">
           <SahayakMascot size={collapsed ? 44 : 64} mood={s.phase} />
           <div className="journey-titles">
@@ -239,7 +264,7 @@ export function SahayakJourney() {
       </header>
 
       {/* ---------- TRACK ---------- */}
-      <ol className="journey-track" aria-label="Journey progress">
+      <ol className="journey-track dev-only" aria-label="Journey progress">
         {STAGES.map((k, i) => (
           <li key={k} className={`jt-step ${s.stages[k]}`} aria-current={j.activeStage === k ? "step" : undefined}>
             <span className="jt-dot" aria-hidden="true">{s.stages[k] === "done" ? <Icon name="check" /> : s.stages[k] === "error" ? <Icon name="alert" /> : s.stages[k] === "skipped" ? "–" : <Icon name={STAGE_ICON[k]} />}</span>
@@ -259,7 +284,7 @@ export function SahayakJourney() {
           {/* ---------- IDLE ---------- */}
           {s.phase === "idle" && !s.report && (
             <div className="journey-idle">
-              <div className="bubble bot">
+              <div className="bubble bot dev-only">
                 <b>{t("idle_title")}</b>
                 <p>{t("idle_sub")}</p>
               </div>
@@ -280,19 +305,23 @@ export function SahayakJourney() {
 
               {(s.phase === "working" || s.phase === "error" || (s.phase === "waiting" && !s.report)) && (
                 <div className={`bubble bot live ${s.phase === "error" ? "err" : ""}`}>
-                  <div className="row" style={{ gap: 8 }}>
+                  <div className="row dev-only" style={{ gap: 8 }}>
                     {s.phase === "working" && <span className="school" aria-hidden="true"><span /><span /><span /></span>}
                     <b>{liveLine}</b>
                   </div>
+                  <div className="row casual-only casual-status" style={{ gap: 10 }}>
+                    {s.phase !== "error" && <span className={`live-dot ${s.phase === "working" ? "pulse" : ""}`} aria-hidden="true" />}
+                    <b>{casualLine}</b>
+                  </div>
                   {s.searches.length > 0 && (
-                    <div className="row journey-mini">
+                    <div className="row journey-mini dev-only">
                       {s.searches.map((x, i) => (
                         <span key={i} className={`chip ${x.error ? "miss" : "live"}`}><Icon name="search" /> {x.scheme} · {x.results}{x.host ? ` · ${x.host}` : ""}</span>
                       ))}
                     </div>
                   )}
                   {s.pages.length > 0 && (
-                    <div className="row journey-mini">
+                    <div className="row journey-mini dev-only">
                       {s.pages.map((p) => (
                         <span key={p.url} className={`chip ${p.ok ? "hit" : "miss"}`} title={p.title ?? p.url}><Icon name="file" /> {p.host} {p.ok ? <Icon name="check" size={11} /> : <Icon name="x" size={11} />}{p.latency_ms ? ` ${(p.latency_ms / 1000).toFixed(1)}s` : ""}</span>
                       ))}
@@ -355,10 +384,10 @@ export function SahayakJourney() {
                     )}
                     <a className="btn sm" href={`/report/${s.report.report_id}`} target="_blank" rel="noreferrer"><Icon name="printer" /> Slip + QR</a>
                     {s.report.live_calls && (
-                      <span className="note">● {s.report.live_calls.search} Search · {s.report.live_calls.fetch_ok}/{s.report.live_calls.fetch_urls} Fetch{s.report.elapsed_ms ? ` · ${(s.report.elapsed_ms / 1000).toFixed(1)}s` : ""}</span>
+                      <span className="note dev-only">● {s.report.live_calls.search} Search · {s.report.live_calls.fetch_ok}/{s.report.live_calls.fetch_urls} Fetch{s.report.elapsed_ms ? ` · ${(s.report.elapsed_ms / 1000).toFixed(1)}s` : ""}</span>
                     )}
                     {agentTotals.n > 0 && (
-                      <span className="note"><Icon name="bot" /> {agentTotals.ok}/{agentTotals.n} live agent{agentTotals.n > 1 ? "s" : ""} · {agentTotals.steps} {t("steps")}{agentTotals.cost ? ` · ${fmtUsd(agentTotals.cost)}` : ""}</span>
+                      <span className="note dev-only"><Icon name="bot" /> {agentTotals.ok}/{agentTotals.n} live agent{agentTotals.n > 1 ? "s" : ""} · {agentTotals.steps} {t("steps")}{agentTotals.cost ? ` · ${fmtUsd(agentTotals.cost)}` : ""}</span>
                     )}
                     {s.finishedAt && <span className="note">{relTime(new Date(s.finishedAt).toISOString(), lang)}</span>}
                   </div>
@@ -367,6 +396,7 @@ export function SahayakJourney() {
                   ) : (
                     <div className="md-body" dangerouslySetInnerHTML={{ __html: mdToHtml(showEn ? s.report.summary_en : s.report.summary_local) }} />
                   )}
+                  {checkedLive && <p className="casual-only casual-trust"><Icon name="check" size={12} /> {t("casual_trust")}</p>}
                 </div>
               )}
             </div>
@@ -446,29 +476,34 @@ function AgentTaskCard({ c, run, t, values, onChange, onSubmit, onOtp, otpOpen }
   const res = run.result ?? {};
   const reg = (res.registration_status as string) ?? (res.status as string) ?? null;
   const ok = !run.running && run.status === "COMPLETED" && !run.needs_otp && !run.needs_captcha;
+  // Casual mode keeps only cards that need the citizen (OTP / CAPTCHA login); live agent telemetry stays Developer-only
+  const needsCitizen = !run.running && (run.needs_otp || run.needs_captcha);
   return (
-    <div className={`bubble bot agent ${run.running ? "live" : ok ? "ok" : "warn"}`}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
+    <div className={`bubble bot agent ${run.running ? "live" : ok ? "ok" : "warn"} ${needsCitizen ? "agent-needs-citizen" : "dev-only"}`}>
+      {needsCitizen && (
+        <p className="casual-only"><b>{c.scheme_name}:</b> {t("agent_blocked_otp")}</p>
+      )}
+      <div className="row dev-only" style={{ justifyContent: "space-between" }}>
         <b><Icon name="bot" /> {run.kind === "verify" ? (run.running ? t(c.mode === "map" ? "verify_map" : "verify_page") : ok ? t("verify_done") : t("agent_failed")) : run.running ? t("agent_running", { host: run.host }) : ok ? t("agent_done") : run.needs_otp ? t("agent_blocked_otp") : t("agent_failed")}</b>
         <span className="note mono" title={t("task_cost", { cost: fmtUsd(run.cost_usd), steps: run.steps })}>{run.steps} {t("steps")}{run.cost_usd ? ` · ${fmtUsd(run.cost_usd)}` : ""}</span>
       </div>
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row dev-only" style={{ gap: 8 }}>
         <b>{c.scheme_name}</b>
         <span className={`agent-kind ${run.kind === "verify" ? "verify" : ""}`}>{run.kind === "verify" ? t("verify_badge") : c.task}</span>
         <span className="note mono">{run.host}{run.run_id ? ` · run ${run.run_id.slice(0, 8)}` : ""}</span>
         {run.streaming_url && run.running && <a className="btn sm" href={run.streaming_url} target="_blank" rel="noreferrer noopener">▶ {t("watch_live")}</a>}
         {run.video_url && !run.running && <a className="btn sm" href={run.video_url} target="_blank" rel="noreferrer noopener">▶ {t("video_rec")}</a>}
       </div>
-      {run.streaming_url && run.running && <iframe className="live-frame" src={run.streaming_url} title="Live TinyFish agent browser" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
+      {run.streaming_url && run.running && <iframe className="live-frame dev-only" src={run.streaming_url} title="Live TinyFish agent browser" sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />}
       {run.log.length > 0 && (
-        <details open={run.running}>
+        <details open={run.running} className="dev-only">
           <summary className="note">{run.log[run.log.length - 1]}</summary>
           <ol className="agent-log">{run.log.map((l, i) => <li key={i}>{l}</li>)}</ol>
         </details>
       )}
-      {!run.running && reg && run.kind !== "verify" && <p><b>{c.scheme_name}:</b> {reg}</p>}
-      {!run.running && run.kind === "verify" && <VerifiedFacts res={res} label={t("verify_facts")} />}
-      {!run.running && run.error && <p className="note err"><Icon name="alert" /> {run.error}</p>}
+      {!run.running && reg && run.kind !== "verify" && <p className="dev-only"><b>{c.scheme_name}:</b> {reg}</p>}
+      {!run.running && run.kind === "verify" && <div className="dev-only"><VerifiedFacts res={res} label={t("verify_facts")} /></div>}
+      {!run.running && run.error && <p className="note err dev-only"><Icon name="alert" /> {run.error}</p>}
       {!run.running && (run.needs_otp || run.needs_captcha) && !otpOpen && (
         <button className="btn sm paid" onClick={onOtp}><Icon name="phone" /> {t("otp_start")}</button>
       )}

@@ -8,8 +8,13 @@ import { useT } from "@/lib/i18n/client";
 import { Icon } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 import { BrandLogo } from "./BrandLogo";
+import { UiModeSwitch } from "./UiModeSwitch";
 
-type Item = { href: string; label: string; icon: React.ReactNode; operatorOnly?: boolean };
+/**
+ * devOnly    → shown only in Developer mode (hidden in Casual via html[data-ui-mode], never unmounted)
+ * casualOnly → shown only in Casual mode
+ */
+type Item = { href: string; label: string; icon: React.ReactNode; operatorOnly?: boolean; devOnly?: boolean; casualOnly?: boolean };
 
 const I = {
   deck: <path d="M3 12c3-6 6-6 9 0s6 6 9 0M3 7h4M17 17h4" />,
@@ -31,18 +36,21 @@ const svg = (p: React.ReactNode) => (
   </svg>
 );
 
-const GROUPS: { title: string; items: Item[] }[] = [
+const GROUPS: { title: string; items: Item[]; devOnly?: boolean }[] = [
   {
     title: "Citizen",
     items: [
-      { href: "/sahayak", label: "Sahayak", icon: svg(I.chat) },
-      { href: "/csc", label: "CSC Desk", icon: svg(I.csc) },
-      { href: "/portal-map", label: "Portal Explorer", icon: svg(I.map) },
+      // Casual mode: "Sahayak" opens the simplified assistant home (/dashboard in casual layout)
+      { href: "/dashboard", label: "Sahayak", icon: svg(I.chat), casualOnly: true },
+      { href: "/sahayak", label: "Sahayak", icon: svg(I.chat), devOnly: true },
+      { href: "/csc", label: "CSC Desk", icon: svg(I.csc), devOnly: true },
+      { href: "/portal-map", label: "Portal Explorer", icon: svg(I.map), devOnly: true },
       { href: "/reports", label: "Benefit Reports", icon: svg(I.doc) },
     ],
   },
   {
     title: "Operate",
+    devOnly: true,
     items: [
       { href: "/dashboard", label: "Mission Deck", icon: svg(I.deck) },
       { href: "/live", label: "Live Browser", icon: svg(I.live) },
@@ -52,6 +60,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   },
   {
     title: "Judge",
+    devOnly: true,
     items: [
       { href: "/judge", label: "Judge Console", icon: svg(I.judge) },
       { href: "/impact", label: "Impact & Wallet", icon: svg(I.chart) },
@@ -122,12 +131,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="sb-nav">
           {GROUPS.map((g) => (
-            <div key={g.title} className="stack" style={{ gap: 3 }}>
+            <div key={g.title} className={`stack ${g.devOnly ? "dev-only" : ""}`} style={{ gap: 3 }}>
               <div className="sb-section">{g.title}</div>
               {g.items.filter((it) => !it.operatorOnly || isOperator).map((it) => {
                 const active = path === it.href || path.startsWith(it.href + "/");
                 return (
-                  <Link key={it.href} href={it.href} className="sb-link" aria-current={active ? "page" : undefined} title={it.label}>
+                  <Link key={`${it.href}:${it.casualOnly ? "c" : it.devOnly ? "d" : "a"}`} href={it.href} className={`sb-link ${it.devOnly ? "dev-only" : ""} ${it.casualOnly ? "casual-only" : ""}`} aria-current={active ? "page" : undefined} title={it.label}>
                     {it.icon}
                     <span className="sb-label">{it.label}</span>
                   </Link>
@@ -137,6 +146,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="sb-foot" aria-live="polite">
+          {/* routes without the floating top navbar still get the Casual / Developer switch here */}
+          {path !== "/dashboard" && <UiModeSwitch compact className="sb-mode-switch desktop-only" />}
           <label className="sb-lang sb-foot-item" title={t("lang_label")}>
             <span className="sb-foot-icon" aria-hidden="true"><Icon name="globe" /></span>
             <select className="sb-lang-select sb-foot-text" value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t("lang_label")}>
@@ -153,8 +164,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             <span className="sb-foot-text">{theme === "light" ? "Dark mode" : "Light mode"}</span>
           </button>
+          {/* billing / telemetry + role switch: Developer mode only */}
           {isOperator ? (
-            <>
+            <div className="dev-only sb-foot-dev">
               <a href="/settings#usage" title={`Live TinyFish wallet balance${wallet.bal ? ` $${wallet.bal}` : ""} · open Usage & Infrastructure`} aria-label="TinyFish wallet · open Usage & Infrastructure" className="sb-wallet sb-foot-item" style={{ color: "inherit", textDecoration: "none" }}>
                 <span className="sb-foot-icon" aria-hidden="true"><Icon name="wallet" /></span>
                 <span className="sb-foot-text">wallet <b>{wallet.bal ? `$${wallet.bal}` : "—"}</b></span>
@@ -162,15 +174,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="sb-foot-text sb-foot-line">
                 used <b>{wallet.spend === null ? "—" : `$${wallet.spend.toFixed(3)}`}</b> · no cap
               </span>
-            </>
+            </div>
           ) : null}
           {roleReady && (
-            <button className="sb-role sb-foot-item" onClick={() => void switchTo(isOperator ? "citizen" : "operator")} title={roleError ?? t(isOperator ? "role_switch_citizen" : "role_switch_operator")} aria-label={t(isOperator ? "role_switch_citizen" : "role_switch_operator")}>
+            <button className="sb-role sb-foot-item dev-only" onClick={() => void switchTo(isOperator ? "citizen" : "operator")} title={roleError ?? t(isOperator ? "role_switch_citizen" : "role_switch_operator")} aria-label={t(isOperator ? "role_switch_citizen" : "role_switch_operator")}>
               <span className="sb-foot-icon" aria-hidden="true"><Icon name={isOperator ? "user" : "wrench"} /></span>
               <span className="sb-foot-text">{t(isOperator ? "role_switch_citizen" : "role_switch_operator")}</span>
             </button>
           )}
-          {roleError && <span className="sb-foot-text sb-foot-line err-note" style={{ whiteSpace: "normal" }}>{roleError}</span>}
+          {roleError && <span className="sb-foot-text sb-foot-line err-note dev-only" style={{ whiteSpace: "normal" }}>{roleError}</span>}
         </div>
       </aside>
       <div className="sb-scrim" onClick={() => setDrawer(false)} aria-hidden="true" />
@@ -187,6 +199,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               LokMitra
             </span>
           </a>
+          <UiModeSwitch compact className="mobile-mode-switch" />
           <ThemeToggle className="mobile-theme-toggle" />
         </div>
         {children}

@@ -24,7 +24,8 @@ export type UiKey =
   | "snap_title" | "snap_sub" | "snap_schemes" | "snap_likely" | "snap_deadlines" | "snap_actions" | "snap_empty" | "snap_reports"
   | "src_title" | "src_sub" | "src_official" | "src_other" | "src_empty" | "src_read_live" | "src_seen"
   | "role_citizen" | "role_operator" | "role_switch_operator" | "role_switch_citizen" | "role_needed" | "role_needed_body"
-  | "tab_integrations" | "tab_usage" | "run_log" | "live_sources" | "error_generic" | "try_again" | "lang_label";
+  | "tab_integrations" | "tab_usage" | "run_log" | "live_sources" | "error_generic" | "try_again" | "lang_label"
+  | "casual_title" | "casual_sub" | "casual_working" | "casual_waiting" | "casual_trust" | "casual_saved" | "casual_close";
 
 type Table = Record<UiKey, string>;
 
@@ -46,6 +47,7 @@ const en: Table = {
   src_title: "Verified Sources", src_sub: "Official pages read live for your answers", src_official: "Official government site", src_other: "Other source", src_empty: "Sources appear here after your first question.", src_read_live: "read live", src_seen: "last read",
   role_citizen: "Citizen", role_operator: "Operator", role_switch_operator: "Operator view", role_switch_citizen: "Citizen view", role_needed: "Operator access required", role_needed_body: "Usage, wallet and infrastructure settings are only visible to operators.",
   tab_integrations: "Integrations", tab_usage: "Usage & Infrastructure", run_log: "Run log", live_sources: "live", error_generic: "Something went wrong", try_again: "Try again", lang_label: "Language",
+  casual_title: "Namaste! How can I help you today?", casual_sub: "Ask about PM-KISAN, Ayushman, scholarships, ration, pension, land records, or mandi prices — by voice or text.", casual_working: "Checking official information for you…", casual_waiting: "I need a little more information from you", casual_trust: "Checked against official government portals", casual_saved: "My Saved Benefits", casual_close: "Close",
 };
 
 const hi: Table = {
@@ -66,6 +68,7 @@ const hi: Table = {
   src_title: "सत्यापित स्रोत", src_sub: "आपके उत्तरों के लिए अभी पढ़े गए आधिकारिक पेज", src_official: "आधिकारिक सरकारी साइट", src_other: "अन्य स्रोत", src_empty: "पहले सवाल के बाद स्रोत यहाँ दिखेंगे।", src_read_live: "लाइव पढ़ा", src_seen: "पिछली बार पढ़ा",
   role_citizen: "नागरिक", role_operator: "ऑपरेटर", role_switch_operator: "ऑपरेटर दृश्य", role_switch_citizen: "नागरिक दृश्य", role_needed: "ऑपरेटर पहुँच आवश्यक", role_needed_body: "उपयोग, वॉलेट और इंफ्रास्ट्रक्चर सेटिंग्स केवल ऑपरेटरों को दिखती हैं।",
   tab_integrations: "इंटीग्रेशन", tab_usage: "उपयोग और इंफ्रास्ट्रक्चर", run_log: "रन लॉग", live_sources: "लाइव", error_generic: "कुछ गलत हो गया", try_again: "फिर से कोशिश करें", lang_label: "भाषा",
+  casual_title: "नमस्ते! आज मैं आपकी कैसे मदद करूँ?", casual_sub: "PM-KISAN, आयुष्मान, छात्रवृत्ति, राशन, पेंशन, भूमि रिकॉर्ड या मंडी भाव के बारे में पूछें — बोलकर या लिखकर।", casual_working: "आपके लिए आधिकारिक जानकारी जाँच रहे हैं…", casual_waiting: "मुझे आपसे थोड़ी और जानकारी चाहिए", casual_trust: "आधिकारिक सरकारी पोर्टलों से जाँचा गया", casual_saved: "मेरे सहेजे गए लाभ", casual_close: "बंद करें",
 };
 
 const mr: Table = {
@@ -86,6 +89,7 @@ const mr: Table = {
   src_title: "पडताळलेले स्रोत", src_sub: "तुमच्या उत्तरांसाठी आत्ता वाचलेली अधिकृत पाने", src_official: "अधिकृत सरकारी साइट", src_other: "इतर स्रोत", src_empty: "पहिल्या प्रश्नानंतर स्रोत येथे दिसतील.", src_read_live: "थेट वाचले", src_seen: "शेवटचे वाचले",
   role_citizen: "नागरिक", role_operator: "ऑपरेटर", role_switch_operator: "ऑपरेटर दृश्य", role_switch_citizen: "नागरिक दृश्य", role_needed: "ऑपरेटर प्रवेश आवश्यक", role_needed_body: "वापर, वॉलेट आणि इन्फ्रास्ट्रक्चर सेटिंग्ज फक्त ऑपरेटरना दिसतात.",
   tab_integrations: "इंटिग्रेशन", tab_usage: "वापर आणि इन्फ्रास्ट्रक्चर", run_log: "रन लॉग", live_sources: "थेट", error_generic: "काहीतरी चुकले", try_again: "पुन्हा प्रयत्न करा", lang_label: "भाषा",
+  casual_title: "नमस्कार! आज मी तुमची कशी मदत करू?", casual_sub: "PM-KISAN, आयुष्मान, शिष्यवृत्ती, रेशन, पेन्शन, जमीन नोंदी किंवा मंडी भाव याबद्दल विचारा — बोलून किंवा लिहून.", casual_working: "तुमच्यासाठी अधिकृत माहिती तपासत आहोत…", casual_waiting: "मला तुमच्याकडून थोडी अधिक माहिती हवी आहे", casual_trust: "अधिकृत सरकारी पोर्टलवर तपासले", casual_saved: "माझे जतन केलेले लाभ", casual_close: "बंद करा",
 };
 
 const ta: Table = {
@@ -106,6 +110,7 @@ const ta: Table = {
   src_title: "சரிபார்க்கப்பட்ட ஆதாரங்கள்", src_sub: "உங்கள் பதில்களுக்காக நேரடியாகப் படித்த அதிகாரப்பூர்வ பக்கங்கள்", src_official: "அதிகாரப்பூர்வ அரசு தளம்", src_other: "பிற ஆதாரம்", src_empty: "முதல் கேள்விக்குப் பிறகு ஆதாரங்கள் இங்கே தோன்றும்.", src_read_live: "நேரடியாகப் படித்தது", src_seen: "கடைசியாகப் படித்தது",
   role_citizen: "குடிமகன்", role_operator: "இயக்குநர்", role_switch_operator: "இயக்குநர் பார்வை", role_switch_citizen: "குடிமகன் பார்வை", role_needed: "இயக்குநர் அனுமதி தேவை", role_needed_body: "பயன்பாடு, வாலெட் மற்றும் உள்கட்டமைப்பு அமைப்புகள் இயக்குநர்களுக்கு மட்டுமே தெரியும்.",
   tab_integrations: "ஒருங்கிணைப்புகள்", tab_usage: "பயன்பாடு & உள்கட்டமைப்பு", run_log: "இயக்கப் பதிவு", live_sources: "நேரடி", error_generic: "ஏதோ தவறு நடந்தது", try_again: "மீண்டும் முயற்சி", lang_label: "மொழி",
+  casual_title: "வணக்கம்! இன்று நான் உங்களுக்கு எப்படி உதவலாம்?", casual_sub: "PM-KISAN, ஆயுஷ்மான், கல்வி உதவித்தொகை, ரேஷன், ஓய்வூதியம், நில ஆவணங்கள் அல்லது மண்டி விலைகள் பற்றி கேளுங்கள் — குரல் அல்லது உரை மூலம்.", casual_working: "உங்களுக்காக அதிகாரப்பூர்வ தகவலைச் சரிபார்க்கிறோம்…", casual_waiting: "உங்களிடமிருந்து இன்னும் சிறிது தகவல் தேவை", casual_trust: "அதிகாரப்பூர்வ அரசு இணையதளங்களுடன் சரிபார்க்கப்பட்டது", casual_saved: "நான் சேமித்த நலன்கள்", casual_close: "மூடு",
 };
 
 const te: Table = {
@@ -126,6 +131,7 @@ const te: Table = {
   src_title: "ధృవీకరించిన మూలాలు", src_sub: "మీ సమాధానాల కోసం ప్రత్యక్షంగా చదివిన అధికారిక పేజీలు", src_official: "అధికారిక ప్రభుత్వ సైట్", src_other: "ఇతర మూలం", src_empty: "మొదటి ప్రశ్న తర్వాత మూలాలు ఇక్కడ కనిపిస్తాయి.", src_read_live: "ప్రత్యక్షంగా చదివింది", src_seen: "చివరిగా చదివింది",
   role_citizen: "పౌరుడు", role_operator: "ఆపరేటర్", role_switch_operator: "ఆపరేటర్ వీక్షణ", role_switch_citizen: "పౌర వీక్షణ", role_needed: "ఆపరేటర్ యాక్సెస్ అవసరం", role_needed_body: "వినియోగం, వాలెట్ మరియు మౌలిక సదుపాయాల సెట్టింగ్‌లు ఆపరేటర్లకు మాత్రమే కనిపిస్తాయి.",
   tab_integrations: "ఇంటిగ్రేషన్‌లు", tab_usage: "వినియోగం & మౌలిక సదుపాయాలు", run_log: "రన్ లాగ్", live_sources: "ప్రత్యక్ష", error_generic: "ఏదో తప్పు జరిగింది", try_again: "మళ్ళీ ప్రయత్నించండి", lang_label: "భాష",
+  casual_title: "నమస్తే! ఈరోజు నేను మీకు ఎలా సహాయం చేయగలను?", casual_sub: "PM-KISAN, ఆయుష్మాన్, స్కాలర్‌షిప్‌లు, రేషన్, పెన్షన్, భూమి రికార్డులు లేదా మండి ధరల గురించి అడగండి — మాటల ద్వారా లేదా టైప్ చేసి.", casual_working: "మీ కోసం అధికారిక సమాచారాన్ని తనిఖీ చేస్తున్నాం…", casual_waiting: "మీ నుండి ఇంకొంచెం సమాచారం కావాలి", casual_trust: "అధికారిక ప్రభుత్వ పోర్టళ్లతో తనిఖీ చేయబడింది", casual_saved: "నా సేవ్ చేసిన ప్రయోజనాలు", casual_close: "మూసివేయి",
 };
 
 const bn: Table = {
@@ -146,6 +152,7 @@ const bn: Table = {
   src_title: "যাচাইকৃত সূত্র", src_sub: "আপনার উত্তরের জন্য লাইভ পড়া সরকারি পৃষ্ঠা", src_official: "সরকারি ওয়েবসাইট", src_other: "অন্য সূত্র", src_empty: "প্রথম প্রশ্নের পরে সূত্র এখানে দেখা যাবে।", src_read_live: "লাইভ পড়া", src_seen: "শেষ পড়া",
   role_citizen: "নাগরিক", role_operator: "অপারেটর", role_switch_operator: "অপারেটর ভিউ", role_switch_citizen: "নাগরিক ভিউ", role_needed: "অপারেটর অ্যাক্সেস প্রয়োজন", role_needed_body: "ব্যবহার, ওয়ালেট এবং পরিকাঠামো সেটিংস শুধুমাত্র অপারেটরদের জন্য।",
   tab_integrations: "ইন্টিগ্রেশন", tab_usage: "ব্যবহার ও পরিকাঠামো", run_log: "রান লগ", live_sources: "লাইভ", error_generic: "কিছু ভুল হয়েছে", try_again: "আবার চেষ্টা করুন", lang_label: "ভাষা",
+  casual_title: "নমস্কার! আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি?", casual_sub: "PM-KISAN, আয়ুষ্মান, বৃত্তি, রেশন, পেনশন, জমির রেকর্ড বা মান্ডির দাম সম্পর্কে জিজ্ঞাসা করুন — কথা বলে বা লিখে।", casual_working: "আপনার জন্য সরকারি তথ্য যাচাই করছি…", casual_waiting: "আপনার কাছ থেকে আরও একটু তথ্য দরকার", casual_trust: "সরকারি পোর্টালের সাথে যাচাই করা হয়েছে", casual_saved: "আমার সংরক্ষিত সুবিধা", casual_close: "বন্ধ করুন",
 };
 
 const gu: Table = {
@@ -166,6 +173,7 @@ const gu: Table = {
   src_title: "ચકાસેલા સ્ત્રોત", src_sub: "તમારા જવાબો માટે લાઇવ વાંચેલાં સત્તાવાર પેજ", src_official: "સત્તાવાર સરકારી સાઇટ", src_other: "અન્ય સ્ત્રોત", src_empty: "પહેલા પ્રશ્ન પછી સ્ત્રોત અહીં દેખાશે.", src_read_live: "લાઇવ વાંચ્યું", src_seen: "છેલ્લે વાંચ્યું",
   role_citizen: "નાગરિક", role_operator: "ઓપરેટર", role_switch_operator: "ઓપરેટર દૃશ્ય", role_switch_citizen: "નાગરિક દૃશ્ય", role_needed: "ઓપરેટર ઍક્સેસ જરૂરી", role_needed_body: "ઉપયોગ, વૉલેટ અને ઇન્ફ્રાસ્ટ્રક્ચર સેટિંગ્સ ફક્ત ઓપરેટરોને દેખાય છે.",
   tab_integrations: "ઇન્ટિગ્રેશન", tab_usage: "ઉપયોગ અને ઇન્ફ્રાસ્ટ્રક્ચર", run_log: "રન લૉગ", live_sources: "લાઇવ", error_generic: "કંઈક ખોટું થયું", try_again: "ફરી પ્રયાસ કરો", lang_label: "ભાષા",
+  casual_title: "નમસ્તે! આજે હું તમારી કેવી રીતે મદદ કરી શકું?", casual_sub: "PM-KISAN, આયુષ્માન, શિષ્યવૃત્તિ, રેશન, પેન્શન, જમીન રેકોર્ડ અથવા મંડી ભાવ વિશે પૂછો — બોલીને અથવા લખીને.", casual_working: "તમારા માટે સત્તાવાર માહિતી તપાસી રહ્યા છીએ…", casual_waiting: "મને તમારી પાસેથી થોડી વધુ માહિતી જોઈએ છે", casual_trust: "સત્તાવાર સરકારી પોર્ટલ સાથે ચકાસાયેલ", casual_saved: "મારા સાચવેલા લાભો", casual_close: "બંધ કરો",
 };
 
 export const UI_STRINGS: Record<UiLang, Table> = { en, hi, mr, ta, te, bn, gu };

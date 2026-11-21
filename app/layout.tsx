@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { UI_MODE_BOOT } from "@/lib/ui-mode";
 
 export const metadata: Metadata = {
   title: "LokMitra | Every Government Benefit, In Your Own Language",
@@ -36,6 +37,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: calmBoot }} />
+        {/* restores the Casual / Developer UI mode (localStorage "lokmitra_ui_mode") before paint */}
+        <script dangerouslySetInnerHTML={{ __html: UI_MODE_BOOT }} />
         <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
